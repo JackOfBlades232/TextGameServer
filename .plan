@@ -1,0 +1,16 @@
+= Single-session fool game =
+    - Make main server framework
+    - Create logic
+    - Polish "UI" (Text over TCP/IP)
+
+= Multi-session fool game =
+    - Create simple multisessioning (once one has started, create new)
+    - Add passwd and logging in
+    - Create real-time chat
+    - Add spec command to chat to create/join game with id
+
+= Implement another text game & make server multi-game =
+    - Create a riddles game
+        (one player sends riddle and answers, the other one guesses)
+    - Rewire main server so as to be able to choose between games
+    - Create more games?
