@@ -6,19 +6,15 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <fcntl.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: think about the read/write/make/quit order! right now messages on
-//  make and quit fit poorly and quit is done in a hacky way
-
-// @TODO: add framework-wide error/disconnection messages
-// @TODO: add framework-wide too-long line constraint & message
 // @TODO: implement variation with threads
 // @TODO: implement normal quit on ^C
-
 
 // @IDEA: maybe I should only allow reading or writing at a time
 //      (read line, then respond, and so on)
@@ -33,7 +29,7 @@ typedef struct session_tag {
     int buf_used;
 
     session_interface l_interf;
-    session_state *l_state;
+    session_logic *l_logic;
 } session;
 
 typedef struct server_tag {
@@ -41,7 +37,7 @@ typedef struct server_tag {
     session **sessions;
     int sessions_size;
 
-    server_state *l_state;
+    server_logic *l_logic;
 } server;
 
 session *make_session(int fd, server *serv)
@@ -54,7 +50,7 @@ session *make_session(int fd, server *serv)
     sess->l_interf.out_buf_len = 0;
     sess->l_interf.quit = false;
 
-    sess->l_state = make_session_state(serv->l_state, &sess->l_interf);
+    sess->l_logic = make_session_logic(serv->l_logic, &sess->l_interf);
     return sess;
 }
 
@@ -62,7 +58,7 @@ void cleanup_session(session *sess)
 {
     // @TODO: defer freeing to poster?
     if (sess->l_interf.out_buf) free(sess->l_interf.out_buf);
-    if (sess->l_state) destroy_session_state(sess->l_state);
+    if (sess->l_logic) destroy_session_logic(sess->l_logic);
 }
 
 void session_check_lf(session *sess)
@@ -86,26 +82,27 @@ void session_check_lf(session *sess)
     if (line[pos-1] == '\r')
         line[pos-1] = '\0';
 
-    session_state_process_line(sess->l_state, line);
+    session_logic_process_line(sess->l_logic, line);
     free(line);
 }
 
 bool session_do_read(session *sess)
 {
+    // If waiting to send data or marked for quit, skip turn
+    if (sess->l_interf.out_buf || sess->l_interf.quit)
+        return true;
+
     int rc, bufp = sess->buf_used;
     rc = read(sess->fd, sess->buf + bufp, INBUFSIZE-bufp);
-    if (rc <= 0) {
-        // @TODO: handle disconnection
-        sess->l_interf.quit = true;
+    if (rc <= 0) // Disconnected
         return false;
-    }
 
     sess->buf_used += rc;
     session_check_lf(sess);
 
     // If session logic set quit to true, still perform the write if need be
     if (sess->buf_used == INBUFSIZE) {
-        // @TODO: handle too long line
+        session_logic_post_too_long_line_msg(sess->l_logic);
         sess->l_interf.quit = true;
     }
 
@@ -116,7 +113,7 @@ bool session_do_write(session *sess)
 {
     ASSERT(sess->l_interf.out_buf && sess->l_interf.out_buf_len > 0);
 
-    // @FEATURE: Implement cutting up?
+    // @TODO: Implement cutting up
     int wc = write(sess->fd, 
                    sess->l_interf.out_buf, 
                    sess->l_interf.out_buf_len);
@@ -127,11 +124,8 @@ bool session_do_write(session *sess)
     sess->l_interf.out_buf = NULL;
     sess->l_interf.out_buf_len = 0;
 
-    if (wc <= 0) {
-        // @TODO: handle disconnection
-        sess->l_interf.quit = true;
+    if (wc <= 0) // Disconnected
         return false;
-    }
 
     return true;
 }
@@ -159,8 +153,8 @@ void server_init(server *serv, int port)
     serv->sessions = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->sessions));
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
-    serv->l_state = make_server_state();
-    ASSERT(serv->l_state);
+    serv->l_logic = make_server_logic();
+    ASSERT(serv->l_logic);
 }
 
 void server_accept_client(server *serv)
@@ -170,6 +164,9 @@ void server_accept_client(server *serv)
     socklen_t len = sizeof(addr);
     sd = accept(serv->ls, (struct sockaddr *) &addr, &len);
     ASSERT_ERR(sd >= 0);
+
+    int flags = fcntl(sd, F_GETFL);
+    fcntl(sd, F_SETFL, flags | O_NONBLOCK);
 
     if (sd >= serv->sessions_size) { // resize if needed
         int newsize = serv->sessions_size;
@@ -184,10 +181,6 @@ void server_accept_client(server *serv)
 
     serv->sessions[sd] = make_session(sd, serv);
     ASSERT(serv->sessions[sd]);
-
-    // @HACK (for server full message sendout after make)
-    if (serv->sessions[sd]->l_interf.out_buf)
-        session_do_write(serv->sessions[sd]);
 }
 
 void server_close_session(server *serv, int sd)
@@ -246,11 +239,13 @@ int main(int argc, char **argv)
                 }
                 if (FD_ISSET(i, &writefds)) {
                     int swr = session_do_write(sess);
-                    if (!swr)
+                    if (!swr) {
                         server_close_session(&serv, i);
+                        continue;
+                    }
                 }
 
-                if (sess->l_interf.quit)
+                if (sess->l_interf.quit && !sess->l_interf.out_buf)
                     server_close_session(&serv, i);
             }
         }

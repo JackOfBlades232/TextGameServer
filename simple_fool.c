@@ -4,8 +4,8 @@
 
 #define MAX_PLAYERS_PER_GAME 2
 
-struct session_state_tag {
-    server_state *serv;
+struct session_logic_tag {
+    server_logic *serv;
     session_interface *interf;
 
     // @TEST
@@ -15,16 +15,26 @@ struct session_state_tag {
     // @TODO: add game logic
 };
 
-struct server_state_tag {
-    session_state *players[MAX_PLAYERS_PER_GAME];
+struct server_logic_tag {
+    session_logic *players[MAX_PLAYERS_PER_GAME];
     int num_players;
 
     // @TODO: add game logic
 };
 
-server_state *make_server_state()
+#define OUTBUF_POST(_sess_l, _str) do { \
+    _sess_l->interf->out_buf = strdup(_str); \
+    _sess_l->interf->out_buf_len = strlen(_sess_l->interf->out_buf); \
+} while (0)
+
+#define OUTBUF_POSTF(_sess_l, _max_len, _fmt, ...) do { \
+    _sess_l->interf->out_buf = malloc(_max_len * sizeof(*_sess_l->interf->out_buf)); \
+    _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
+} while (0)
+
+server_logic *make_server_logic()
 {
-    server_state *serv = malloc(sizeof(*serv));
+    server_logic *serv = malloc(sizeof(*serv));
     for (int i = 0; i < sizeof(serv->players); i++)
         serv->players[i] = NULL;
     serv->num_players = 0;
@@ -32,63 +42,58 @@ server_state *make_server_state()
     return serv;
 }
 
-session_state *make_session_state(server_state *serv_s,
+session_logic *make_session_logic(server_logic *serv_l,
                                   session_interface *interf)
 {
-    ASSERT(serv_s);
+    ASSERT(serv_l);
     ASSERT(interf);
 
-    session_state *sess = malloc(sizeof(*sess));
-    sess->serv = serv_s;
+    session_logic *sess = malloc(sizeof(*sess));
+    sess->serv = serv_l;
     sess->interf = interf;
 
-    if (serv_s->num_players >= MAX_PLAYERS_PER_GAME) {
-        // @TODO: factor out posting
+    if (serv_l->num_players >= MAX_PLAYERS_PER_GAME) {
         // @TEST
-        sess->interf->out_buf = malloc(64 * sizeof(*sess->interf->out_buf));
-        sess->interf->out_buf_len =
-            sprintf(sess->interf->out_buf, "The server is full (%d/%d)!\n",
-                    MAX_PLAYERS_PER_GAME, MAX_PLAYERS_PER_GAME);
+        OUTBUF_POSTF(sess, 64, "The server is full (%d/%d)!\r\n",
+                     MAX_PLAYERS_PER_GAME, MAX_PLAYERS_PER_GAME);
                     
         interf->quit = true;
         return sess;
     }
 
     // @TEST
-    sess->id = serv_s->num_players;
+    sess->id = serv_l->num_players;
     sess->lines_read = 0;
 
-    serv_s->players[serv_s->num_players] = sess;
-    serv_s->num_players++;
+    serv_l->players[serv_l->num_players] = sess;
+    serv_l->num_players++;
 
     return sess;
 }
 
-void destroy_session_state(session_state *sess_s)
+void destroy_session_logic(session_logic *sess_l)
 {
-    ASSERT(sess_s);
+    ASSERT(sess_l);
 
-    for (int i = 0; i < sizeof(sess_s->serv->players); i++) {
-        if (sess_s->serv->players[i] == sess_s) {
-            sess_s->serv->players[i] = NULL;
-            sess_s->serv->num_players--;
+    for (int i = 0; i < sizeof(sess_l->serv->players); i++) {
+        if (sess_l->serv->players[i] == sess_l) {
+            sess_l->serv->players[i] = NULL;
+            sess_l->serv->num_players--;
         }
     }
 
     // @TODO: logically handle one player disconnection
 
-    free(sess_s);
+    free(sess_l);
 }
 
-void session_state_process_line(session_state *sess_s, const char *line)
+void session_logic_process_line(session_logic *sess_l, const char *line)
 {
-    // @TEST
-    if (sess_s->interf->out_buf)
-        return;
+    OUTBUF_POSTF(sess_l, 128, "Session %d read line %d, here it is: %s\r\n",
+                 sess_l->id, ++(sess_l->lines_read), line);
+}
 
-    sess_s->interf->out_buf = malloc(128 * sizeof(*sess_s->interf->out_buf));
-    sess_s->interf->out_buf_len =
-        sprintf(sess_s->interf->out_buf,
-                "Session %d read line %d, here it is: %s\n",
-                sess_s->id, ++(sess_s->lines_read), line);
+void session_logic_post_too_long_line_msg(session_logic *sess_l)
+{
+    OUTBUF_POST(sess_l, "ERR: Line was too long\r\n");
 }
