@@ -189,6 +189,11 @@ void server_close_session(server *serv, int sd)
     serv->sessions[sd] = NULL;
 }
 
+void init_subsystems()
+{
+    srand(time(NULL));
+}
+
 int main(int argc, char **argv) 
 {
     server serv;
@@ -200,6 +205,7 @@ int main(int argc, char **argv)
     port = strtol(argv[1], &endptr, 10);
     ASSERTF(*argv[1] && !*endptr, "Invalid port number\n");
         
+    init_subsystems();
     server_init(&serv, port);
 
     for (;;) {

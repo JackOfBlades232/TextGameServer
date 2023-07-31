@@ -55,8 +55,11 @@ void ll_push_front(linked_list_t *list, void *data)
     new_head->data = data;
     new_head->prev = NULL;
     new_head->next = list->head;
-    list->head->prev = new_head;
+    if (list->head)
+        list->head->prev = new_head;
     list->head = new_head;
+
+    list->size++;
 }
 
 static void ll_remove_node(list_node_t *node)
@@ -74,6 +77,7 @@ bool ll_remove(linked_list_t *list, void *data)
     list_node_t *node = ll_find(list, data);
     if (node) {
         ll_remove_node(node);
+        list->size--;
         return true;
     } else
         return false;
@@ -86,6 +90,7 @@ bool ll_remove_at(linked_list_t *list, int idx)
     list_node_t *node = ll_find_at(list, idx);
     if (node) {
         ll_remove_node(node);
+        list->size--;
         return true;
     } else
         return false;
