@@ -8,16 +8,19 @@ typedef struct session_interface_tag {
     char *out_buf;
     int out_buf_len;
     bool quit;
-} session_interface;
+} session_interface_t;
 
-typedef struct session_logic_tag session_logic;
-typedef struct server_logic_tag server_logic;
+typedef struct session_logic_tag session_logic_t;
+typedef struct server_logic_tag server_logic_t;
 
-server_logic *make_server_logic();
-session_logic *make_session_logic(server_logic *serv_s,
-                                  session_interface *interf);
-void destroy_session_logic(session_logic *sess_s);
-void session_logic_process_line(session_logic *sess_s, const char *line);
-void session_logic_post_too_long_line_msg(session_logic *sess_l);
+server_logic_t *make_server_logic();
+void destroy_server_logic(server_logic_t *serv_l);
+session_logic_t *make_session_logic(server_logic_t *serv_s,
+                                    session_interface_t *interf);
+void destroy_session_logic(session_logic_t *sess_s);
+void session_logic_process_line(session_logic_t *sess_s, const char *line);
+
+// Not passing the line in, just process the event (like send smth and quit)
+void session_logic_process_too_long_line(session_logic_t *sess_l);
 
 #endif

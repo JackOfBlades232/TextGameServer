@@ -1,25 +1,71 @@
 /* TextGameServer/simple_fool.c */
 #include "logic.h"
+#include "linked_list.h"
 #include <stdlib.h>
 
-#define MAX_PLAYERS_PER_GAME 2
+#define MAX_PLAYERS_PER_GAME 8
+#define MAX_TABLE_CARDS      6
+#define DECK_SIZE            52
+
+typedef enum card_suit_tag {
+    cs_spades, 
+    cs_clubs,
+    cs_hearts,
+    cs_diamonds
+} card_suit_t;
+
+typedef enum card_value_tag {
+    cv_two    = 2,
+    cv_three  = 3,
+    cv_four   = 4,
+    cv_five   = 5,
+    cv_six    = 6,
+    cv_seven  = 7,
+    cv_eight  = 8,
+    cv_nine   = 9,
+    cv_ten    = 10,
+    cv_jack   = 11,
+    cv_queen  = 12,
+    cv_king   = 13,
+    cv_ace    = 14,
+} card_value_t;
+
+typedef struct card_tag {
+    card_suit_t suit;
+    card_value_t val;
+} card_t;
+
+typedef struct deck_tag {
+    card_t cards[DECK_SIZE];
+    card_t *head;
+    card_t *trump;
+} deck_t;
+
+typedef struct table_tag {
+    card_t *cards[MAX_TABLE_CARDS][2];
+    int pairs_played;
+    bool waiting_for_defender;
+} table_t;
 
 struct session_logic_tag {
-    server_logic *serv;
-    session_interface *interf;
+    server_logic_t *serv;
+    session_interface_t *interf;
 
     // @TEST
     int id;
     int lines_read;
 
     // @TODO: add game logic
+    linked_list_t *hand;
 };
 
 struct server_logic_tag {
-    session_logic *players[MAX_PLAYERS_PER_GAME];
+    session_logic_t *players[MAX_PLAYERS_PER_GAME];
     int num_players;
 
-    // @TODO: add game logic
+    deck_t deck;
+    table_t table;
+    // @TODO: add game state (waiting, playing), and more fine (which player defends, so on)
 };
 
 #define OUTBUF_POST(_sess_l, _str) do { \
@@ -32,23 +78,29 @@ struct server_logic_tag {
     _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
 } while (0)
 
-server_logic *make_server_logic()
+server_logic_t *make_server_logic()
 {
-    server_logic *serv = malloc(sizeof(*serv));
-    for (int i = 0; i < sizeof(serv->players); i++)
+    server_logic_t *serv = malloc(sizeof(*serv));
+    for (int i = 0; i < MAX_PLAYERS_PER_GAME; i++)
         serv->players[i] = NULL;
     serv->num_players = 0;
 
     return serv;
 }
 
-session_logic *make_session_logic(server_logic *serv_l,
-                                  session_interface *interf)
+void destroy_server_logic(server_logic_t *serv_l)
+{
+    ASSERT(serv_l);
+    free(serv_l);
+}
+
+session_logic_t *make_session_logic(server_logic_t *serv_l,
+                                    session_interface_t *interf)
 {
     ASSERT(serv_l);
     ASSERT(interf);
 
-    session_logic *sess = malloc(sizeof(*sess));
+    session_logic_t *sess = malloc(sizeof(*sess));
     sess->serv = serv_l;
     sess->interf = interf;
 
@@ -71,11 +123,11 @@ session_logic *make_session_logic(server_logic *serv_l,
     return sess;
 }
 
-void destroy_session_logic(session_logic *sess_l)
+void destroy_session_logic(session_logic_t *sess_l)
 {
     ASSERT(sess_l);
 
-    for (int i = 0; i < sizeof(sess_l->serv->players); i++) {
+    for (int i = 0; i < MAX_PLAYERS_PER_GAME; i++) {
         if (sess_l->serv->players[i] == sess_l) {
             sess_l->serv->players[i] = NULL;
             sess_l->serv->num_players--;
@@ -87,13 +139,14 @@ void destroy_session_logic(session_logic *sess_l)
     free(sess_l);
 }
 
-void session_logic_process_line(session_logic *sess_l, const char *line)
+void session_logic_process_line(session_logic_t *sess_l, const char *line)
 {
     OUTBUF_POSTF(sess_l, 128, "Session %d read line %d, here it is: %s\r\n",
                  sess_l->id, ++(sess_l->lines_read), line);
 }
 
-void session_logic_post_too_long_line_msg(session_logic *sess_l)
+void session_logic_process_too_long_line(session_logic_t *sess_l)
 {
     OUTBUF_POST(sess_l, "ERR: Line was too long\r\n");
+    sess_l->interf->quit = true;
 }

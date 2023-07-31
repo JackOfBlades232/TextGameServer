@@ -28,8 +28,8 @@ typedef struct session_tag {
     char buf[INBUFSIZE];
     int buf_used;
 
-    session_interface l_interf;
-    session_logic *l_logic;
+    session_interface_t l_interf;
+    session_logic_t *logic;
 } session;
 
 typedef struct server_tag {
@@ -37,7 +37,7 @@ typedef struct server_tag {
     session **sessions;
     int sessions_size;
 
-    server_logic *l_logic;
+    server_logic_t *logic;
 } server;
 
 session *make_session(int fd, server *serv)
@@ -50,7 +50,7 @@ session *make_session(int fd, server *serv)
     sess->l_interf.out_buf_len = 0;
     sess->l_interf.quit = false;
 
-    sess->l_logic = make_session_logic(serv->l_logic, &sess->l_interf);
+    sess->logic = make_session_logic(serv->logic, &sess->l_interf);
     return sess;
 }
 
@@ -58,7 +58,7 @@ void cleanup_session(session *sess)
 {
     // @TODO: defer freeing to poster?
     if (sess->l_interf.out_buf) free(sess->l_interf.out_buf);
-    if (sess->l_logic) destroy_session_logic(sess->l_logic);
+    if (sess->logic) destroy_session_logic(sess->logic);
 }
 
 void session_check_lf(session *sess)
@@ -82,7 +82,7 @@ void session_check_lf(session *sess)
     if (line[pos-1] == '\r')
         line[pos-1] = '\0';
 
-    session_logic_process_line(sess->l_logic, line);
+    session_logic_process_line(sess->logic, line);
     free(line);
 }
 
@@ -101,10 +101,8 @@ bool session_do_read(session *sess)
     session_check_lf(sess);
 
     // If session logic set quit to true, still perform the write if need be
-    if (sess->buf_used == INBUFSIZE) {
-        session_logic_post_too_long_line_msg(sess->l_logic);
-        sess->l_interf.quit = true;
-    }
+    if (sess->buf_used == INBUFSIZE)
+        session_logic_process_too_long_line(sess->logic);
 
     return true;
 }
@@ -153,8 +151,8 @@ void server_init(server *serv, int port)
     serv->sessions = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->sessions));
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
-    serv->l_logic = make_server_logic();
-    ASSERT(serv->l_logic);
+    serv->logic = make_server_logic();
+    ASSERT(serv->logic);
 }
 
 void server_accept_client(server *serv)
@@ -230,26 +228,21 @@ int main(int argc, char **argv)
         for (int i = 0; i < serv.sessions_size; i++) {
             session *sess = serv.sessions[i];
             if (sess) {
-                if (FD_ISSET(i, &readfds)) {
-                    int srr = session_do_read(sess);
-                    if (!srr) {
-                        server_close_session(&serv, i);
-                        continue;
-                    }
-                }
-                if (FD_ISSET(i, &writefds)) {
-                    int swr = session_do_write(sess);
-                    if (!swr) {
-                        server_close_session(&serv, i);
-                        continue;
-                    }
-                }
-
-                if (sess->l_interf.quit && !sess->l_interf.out_buf)
+                if (
+                        // Try read incoming data, close if disconnected
+                        (FD_ISSET(i, &readfds) && !session_do_read(sess)) ||
+                        // Try write queued data, close if disconnected
+                        (FD_ISSET(i, &writefds) && !session_do_write(sess)) ||
+                        // If logic says "quit" and all data is sent, also close
+                        (sess->l_interf.quit && !sess->l_interf.out_buf)
+                   ) 
+                {
                     server_close_session(&serv, i);
+                }
             }
         }
     }
 
+    destroy_server_logic(serv.logic);
     return 0;
 }
