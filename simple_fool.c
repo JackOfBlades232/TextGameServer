@@ -1,6 +1,5 @@
 /* TextGameServer/simple_fool.c */
 #include "logic.h"
-#include "linked_list.h"
 #include "utils.h"
 #include <stdlib.h>
 #include <limits.h>
