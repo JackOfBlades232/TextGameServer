@@ -4,6 +4,7 @@
 
 #include "defs.h"
 #include <stddef.h>
+#include <stdlib.h>
 
 typedef struct list_node_tag {
     void *data;
@@ -20,7 +21,7 @@ void ll_free(linked_list_t *list);
 list_node_t *ll_find(linked_list_t *list, void *query);
 list_node_t *ll_find_at(linked_list_t *list, int idx);
 void ll_push_front(linked_list_t *list, void *data);
-bool ll_remove(linked_list_t *list, void *data);
+bool ll_remove(linked_list_t *list, list_node_t *node);
 bool ll_remove_at(linked_list_t *list, int idx);
 
 inline bool ll_is_empty(linked_list_t *list) { return list->size == 0; }
@@ -37,5 +38,10 @@ void inc_cycl(int *i, int len);
 int next_cycl(int i, int len);
 void dec_cycl(int *i, int len); 
 int prev_cycl(int i, int len);
+
+static inline int randint(int min, int max)
+{
+    return min + (int) ((float) (max-min+1) * rand() / (RAND_MAX+1.0));
+}
 
 #endif

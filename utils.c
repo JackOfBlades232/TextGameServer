@@ -30,6 +30,7 @@ list_node_t *ll_find(linked_list_t *list, void *query)
     while (node) {
         if (node->data == query)
             break;
+        node = node->next;
     }
 
     return node;
@@ -47,6 +48,7 @@ list_node_t *ll_find_at(linked_list_t *list, int idx)
         if (idx == 0)
             break;
         idx--;
+        node = node->next;
     }
 
     return node;
@@ -65,21 +67,18 @@ void ll_push_front(linked_list_t *list, void *data)
     list->size++;
 }
 
-static void ll_remove_node(list_node_t *node)
+bool ll_remove(linked_list_t *list, list_node_t *node)
 {
-    ASSERT(node);
-
-    node->prev->next = node->next;
-    node->next->prev = node->prev;
-
-    free(node);
-}
-
-bool ll_remove(linked_list_t *list, void *data)
-{
-    list_node_t *node = ll_find(list, data);
     if (node) {
-        ll_remove_node(node);
+        if (node->prev)
+            node->prev->next = node->next;
+        else
+            list->head = node->next;
+
+        if (node->next)
+            node->next->prev = node->prev;
+
+        free(node);
         list->size--;
         return true;
     } else
@@ -91,12 +90,7 @@ bool ll_remove_at(linked_list_t *list, int idx)
     ASSERT(idx >= 0);
 
     list_node_t *node = ll_find_at(list, idx);
-    if (node) {
-        ll_remove_node(node);
-        list->size--;
-        return true;
-    } else
-        return false;
+    return ll_remove(list, node);
 }
 
 struct string_builder_tag {

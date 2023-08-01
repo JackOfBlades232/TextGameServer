@@ -4,10 +4,13 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// @TODO: reoder/organize/factor apart functions
-// @IDEA: what shall we do with incorrect-format strings? I think, just say "wrong format" and resend update
+// @TODO: complete main loop (multiple attackers)
+// @TODO: process out of deck and spectator creating situations
+// @TODO: create win-lose condition, messages and processing
+// @TODO: refactor and reoder/organize/factor apart functions
 
-// @TODO: implement random attack order -- once the attacker put down a card, it's free for all
+// @TODO: reset game if it was stopped somehow
+// @TODO: highlight the defending player somehow
 
 #define NUM_SUITS            4
 #define NUM_VALS             13
@@ -60,7 +63,7 @@ typedef struct deck_tag {
 typedef struct table_tag {
     card_t *faceoffs[MAX_TABLE_CARDS][2];
     int cards_played;
-    bool waiting_for_defender;
+    int cards_beat;
 } table_t;
 
 typedef enum player_state_tag {
@@ -69,6 +72,23 @@ typedef enum player_state_tag {
     ps_defending,
     ps_spectating
 } player_state_t;
+
+typedef enum game_state_tag {
+    gs_awaiting_players,
+    gs_first_card,
+    gs_free_for_all,
+    gs_game_end     
+} game_state_t;
+
+static inline char card_char_index(int i)
+{
+    return i < 'z' - 'a' ? i + 'a' : i + 'A' - ('z' - 'a');
+}
+
+static inline int card_char_index_to_int(char c)
+{
+    return c <= 'z' ? c - 'a' : c - 'A' + ('z' - 'a');
+}
 
 static inline bool deck_size(deck_t *d)
 {
@@ -89,8 +109,7 @@ static void generate_deck(deck_t *d)
 
     // Fisher-Yates random permutation
     for (int i = 0; i < DECK_SIZE-1; i++) {
-        // Random index from i to DECK_SIZE-1
-        int xchg_idx = (DECK_SIZE-1) - ((int)((float) (DECK_SIZE-i) * rand() / (RAND_MAX+1.0)));
+        int xchg_idx = randint(i, DECK_SIZE-1);
 
         card_t tmp = d->cards[i];
         d->cards[i] = d->cards[xchg_idx];
@@ -101,7 +120,7 @@ static void generate_deck(deck_t *d)
     d->trump = d->cards[0];
 }
 
-static void init_table(table_t *t)
+static void reset_table(table_t *t)
 {
     for (int i = 0; i < MAX_TABLE_CARDS; i++) {
         t->faceoffs[i][0] = NULL;
@@ -109,7 +128,18 @@ static void init_table(table_t *t)
     }
 
     t->cards_played = 0;
-    t->waiting_for_defender = false;
+    t->cards_beat = 0;
+}
+
+static void flush_table(table_t *t, linked_list_t *hand)
+{
+    for (int i = 0; i < t->cards_played; i++) {
+        ll_push_front(hand, t->faceoffs[i][0]);
+        if (i < t->cards_beat)
+            ll_push_front(hand, t->faceoffs[i][1]);
+    }
+
+    reset_table(t);
 }
 
 static card_t *pop_card_from_deck(deck_t *d)
@@ -120,6 +150,59 @@ static card_t *pop_card_from_deck(deck_t *d)
     card_t *ret = d->head;
     d->head--;
     return ret;
+}
+
+static bool attacker_can_play_card(table_t *t, card_t c)
+{
+    if (t->cards_played <= 0)
+        return true;
+    else if (t->cards_played >= MAX_TABLE_CARDS)
+        return false;
+
+    for (int i = 0; i < t->cards_played; i++) {
+        if (
+                t->faceoffs[i][0]->val == c.val ||
+                (i < t->cards_beat && t->faceoffs[i][1]->val == c.val)
+           ) 
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static inline bool card_is_less(card_t c1, card_t c2, card_suit_t trump_suit)
+{
+    return (c1.suit == c2.suit && c1.val < c2.val) ||
+           (c1.suit != trump_suit && c2.suit == trump_suit);
+}
+
+static bool defender_can_play_card(table_t *t, card_t c, card_suit_t trump_suit)
+{
+    if (t->cards_played <= 0 || t->cards_beat >= t->cards_played)
+        return false;
+
+    card_t *faceoff_card = t->faceoffs[t->cards_beat][0];
+    return card_is_less(*faceoff_card, c, trump_suit);
+}
+
+static bool attacker_try_play_card(table_t *t, card_t *c)
+{
+    if (!attacker_can_play_card(t, *c))
+        return false;
+
+    t->faceoffs[t->cards_played++][0] = c;
+    return true;
+}
+
+static bool defender_try_play_card(table_t *t, card_t *c, card_suit_t trump_suit)
+{
+    if (!defender_can_play_card(t, *c, trump_suit))
+        return false;
+
+    t->faceoffs[t->cards_beat++][1] = c;
+    return true;
 }
 
 struct session_logic_tag {
@@ -134,7 +217,7 @@ struct server_logic_tag {
     session_logic_t *players[MAX_PLAYERS_PER_GAME];
     int num_players;
 
-    bool game_started;
+    game_state_t state;
     int defender_index;
     int attacker_index;
 
@@ -143,11 +226,13 @@ struct server_logic_tag {
 };
 
 #define OUTBUF_POST(_sess_l, _str) do { \
+    if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
     _sess_l->interf->out_buf = strdup(_str); \
     _sess_l->interf->out_buf_len = strlen(_sess_l->interf->out_buf); \
 } while (0)
 
 #define OUTBUF_POSTF(_sess_l, _fmt, ...) do { \
+    if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
     size_t req_size = snprintf(NULL, 0, _fmt, ##__VA_ARGS__) + 1; \
     _sess_l->interf->out_buf = malloc(req_size * sizeof(*_sess_l->interf->out_buf)); \
     _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
@@ -155,14 +240,15 @@ struct server_logic_tag {
 
 static void replenish_hands(server_logic_t *serv_l)
 {
-    int player_idx = serv_l->defender_index;
-    inc_cycl(&player_idx, serv_l->num_players);
+    int player_idx = serv_l->attacker_index;
 
     for (int i = 0; i < serv_l->num_players; i++)
     {
         session_logic_t *player = serv_l->players[player_idx];
-        if (player->state == ps_spectating)
+        if (player->state == ps_spectating) {
+            inc_cycl(&player_idx, serv_l->num_players);
             continue;
+        }
 
         while (player->hand->size < BASE_PLAYER_CARDS) {
             card_t *card = pop_card_from_deck(&serv_l->deck);
@@ -203,10 +289,10 @@ static void choose_first_turn(server_logic_t *serv_l)
         }
     }
 
-    if (serv_l->attacker_index == -1)
-        serv_l->attacker_index = 0;
+    serv_l->defender_index = prev_cycl(serv_l->attacker_index, serv_l->num_players);
 
-    serv_l->defender_index = prev_cycl(serv_l->defender_index, serv_l->num_players);
+    serv_l->players[serv_l->defender_index]->state = ps_defending;
+    serv_l->players[serv_l->attacker_index]->state = ps_attacking;
 
     // @TODO: set player states
 }
@@ -245,13 +331,48 @@ static void sb_add_card(string_builder_t *sb, card_t card)
         sb_add_strf(sb, "A%c", suit_c);
 }
 
+static void sb_add_attacker_prompt(string_builder_t *sb,
+                                   linked_list_t *hand,
+                                   server_logic_t *serv_l)
+{
+    table_t *t = &serv_l->table;
+    list_node_t *node = hand->head;
+    for (int i = 0; i < hand->size; i++) {
+        card_t *card = node->data;
+        if (attacker_can_play_card(t, *card))
+            sb_add_strf(sb, "%c", card_char_index(i));
+
+        node = node->next;
+    }
+    sb_add_str(sb, " > ");
+}
+
+static void sb_add_defender_prompt(string_builder_t *sb,
+                                   linked_list_t *hand,
+                                   server_logic_t *serv_l)
+{
+    table_t *t = &serv_l->table;
+    card_suit_t trump_suit = serv_l->deck.trump.suit;
+    list_node_t *node = hand->head;
+    for (int i = 0; i < hand->size; i++) {
+        card_t *card = node->data;
+        if (defender_can_play_card(t, *card, trump_suit))
+            sb_add_strf(sb, "%c", card_char_index(i));
+
+        node = node->next;
+    }
+    sb_add_str(sb, " => ");
+}
+
+// @TODO: refac
 static void send_update_to_player(server_logic_t *serv_l, int i)
 {
-    session_logic_t *self_sess = serv_l->players[i];
+    session_logic_t *player_sess = serv_l->players[i];
     string_builder_t *sb = sb_create();
 
     // Clear screen
     sb_add_str(sb, "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                   "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
                    "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n");
 
     // Player cart counts
@@ -276,36 +397,39 @@ static void send_update_to_player(server_logic_t *serv_l, int i)
     if (table->cards_played > 0) {
         for (int i = 0; i < table->cards_played; i++) {
             card_t **faceoff = table->faceoffs[i];
-            sb_add_strf(sb, "\r\n   ");
+            sb_add_str(sb, "\r\n   ");
             sb_add_card(sb, *faceoff[0]);
 
-            // Do not print last card if defender is yet to answer
-            if (i < table->cards_played - 1 || !table->waiting_for_defender)
+            // Print defender cards where they exist
+            if (i < table->cards_beat) {
+                sb_add_str(sb, " / ");
                 sb_add_card(sb, *faceoff[1]);
+            }
         }
-        sb_add_strf(sb, "\r\n\r\n");
+        sb_add_str(sb, "\r\n\r\n");
     }
 
     // Hand
-    linked_list_t *hand = self_sess->hand;
+    linked_list_t *hand = player_sess->hand;
     list_node_t *node = hand->head;
     for (int i = 0; i < hand->size; i++) {
-        char card_index = i < 'z' - 'a' ? i + 'a' : i + 'A' - ('z' - 'a');
         card_t *card = node->data;
 
-        sb_add_strf(sb, "%c: ", card_index);
+        sb_add_strf(sb, "%c: ", card_char_index(i));
         sb_add_card(sb, *card);
-        sb_add_strf(sb, "   ");
+        sb_add_str(sb, "   ");
 
         node = node->next;
     }
-    sb_add_strf(sb, "\r\n");
+    sb_add_str(sb, "\r\n");
 
-    // @TODO: prompt available cards
+    if (player_sess->state == ps_attacking)
+        sb_add_attacker_prompt(sb, player_sess->hand, serv_l);
+    else if (player_sess->state == ps_defending)
+        sb_add_defender_prompt(sb, player_sess->hand, serv_l);
 
     char *full_str = sb_build_string(sb);
-    //printf("%s", full_str);
-    OUTBUF_POST(self_sess, full_str);
+    OUTBUF_POST(player_sess, full_str);
     free(full_str);
     sb_free(sb);
 }
@@ -320,7 +444,7 @@ static void start_game(server_logic_t *serv_l)
 {
     ASSERT(serv_l->num_players >= MIN_PLAYERS_PER_GAME);
 
-    serv_l->game_started = true;
+    serv_l->state = gs_first_card;
     replenish_hands(serv_l);
     choose_first_turn(serv_l);
 
@@ -336,12 +460,12 @@ server_logic_t *make_server_logic()
         serv->players[i] = NULL;
     serv->num_players = 0;
 
-    serv->game_started = false;
-    serv->defender_index = -1;
-    serv->attacker_index = -1;
+    serv->state = gs_awaiting_players;
+    serv->defender_index = 0;
+    serv->attacker_index = 0;
 
     generate_deck(&serv->deck);
-    init_table(&serv->table);
+    reset_table(&serv->table);
 
     return serv;
 }
@@ -372,14 +496,13 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
         
         interf->quit = true;
         return sess;
-    } else if (serv_l->game_started) {
+    } else if (serv_l->state != gs_awaiting_players) {
         OUTBUF_POST(sess, "The game has already started! Try again later\r\n");
         interf->quit = true;
         return sess;
     }
 
-    serv_l->players[serv_l->num_players] = sess;
-    serv_l->num_players++;
+    serv_l->players[serv_l->num_players++] = sess;
 
     if (serv_l->num_players == MAX_PLAYERS_PER_GAME)
         start_game(serv_l);        
@@ -390,29 +513,170 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
 void destroy_session_logic(session_logic_t *sess_l)
 {
     ASSERT(sess_l);
+    server_logic_t *serv_l = sess_l->serv;
 
-    for (int i = 0; i < MAX_PLAYERS_PER_GAME; i++) {
-        if (sess_l->serv->players[i] == sess_l) {
-            sess_l->serv->players[i] = NULL;
-            sess_l->serv->num_players--;
+    bool offset = false;
+    for (int i = 0; i < serv_l->num_players; i++) {
+        if (serv_l->players[i] == sess_l) {
+            serv_l->num_players--;
+            offset = true;
+
+            if (serv_l->defender_index >= i)
+                serv_l->defender_index--;
+            if (serv_l->attacker_index >= i)
+                serv_l->attacker_index--;
+        } else if (offset) {
+            serv_l->players[i-1] = serv_l->players[i];
+            serv_l->players[i] = NULL;
         }
     }
 
-    // @TODO: logically handle one player disconnection (oopsy-daisy all the other players)
+    // If a live player has disconnected, end the game
+    if (sess_l->state != ps_spectating && !sess_l->interf->quit) {
+        for (int i = 0; i < serv_l->num_players; i++) {
+            session_logic_t *other_l = serv_l->players[i]; 
+            if (other_l) {
+                OUTBUF_POST(other_l, "\r\nA player has disconnected, thus the game can not continue. Goodbye!\r\n");
+                other_l->interf->quit = true;
+            }
+        }
+    }
 
     ll_free(sess_l->hand);
     free(sess_l);
 }
 
+// @TODO: factor out some SB stuff?
+static void respond_to_invalid_command(session_logic_t *sess_l)
+{
+    string_builder_t *sb = sb_create();
+    sb_add_str(sb, "Invalid command! Please type in one of the available letters, or just press ENTER to skip turn\r\n"
+                   "If you are the first attacker, or defending with an empty table, you can not skip your turn\r\n");
+
+    if (sess_l->state == ps_attacking)
+        sb_add_attacker_prompt(sb, sess_l->hand, sess_l->serv);
+    else if (sess_l->state == ps_defending)
+        sb_add_defender_prompt(sb, sess_l->hand, sess_l->serv);
+
+    char *full_str = sb_build_string(sb);
+    OUTBUF_POST(sess_l, full_str);
+    free(full_str);
+    sb_free(sb);
+}
+
+// @TODO: refac
+static void advance_turns(server_logic_t *serv_l, int num_turns)
+{
+    ASSERT(num_turns > 0);
+
+    // @TODO: this becomes inf loop if somebody wins (<= 1 non-spectator)
+    while (num_turns > 0) {
+        dec_cycl(&serv_l->attacker_index, serv_l->num_players);
+        if (serv_l->players[serv_l->attacker_index]->state != ps_spectating)
+            num_turns--;
+    }
+
+    serv_l->defender_index = prev_cycl(serv_l->attacker_index, serv_l->num_players);
+    while (serv_l->players[serv_l->defender_index]->state == ps_spectating)
+        dec_cycl(&serv_l->defender_index, serv_l->num_players);
+
+    // @TODO: reset all other states to waiting
+    serv_l->players[serv_l->defender_index]->state = ps_defending;
+    serv_l->players[serv_l->attacker_index]->state = ps_attacking;
+}
+
+static void switch_turn(server_logic_t *serv_l, bool defender_lost)
+{
+    table_t *t = &serv_l->table;
+    session_logic_t *defender = serv_l->players[serv_l->defender_index];
+
+    if (defender_lost) {
+        flush_table(t, defender->hand);
+        advance_turns(serv_l, 2);
+    } else {
+        reset_table(t);
+        advance_turns(serv_l, 1);
+    }
+
+    replenish_hands(serv_l);
+}
+
+// @TODO: refac
 void session_logic_process_line(session_logic_t *sess_l, const char *line)
 {
     server_logic_t *serv_l = sess_l->serv;
 
-    // If waiting for game to start
-    if (!serv_l->game_started) {
+    // If waiting for game to start and somebody pressed ENTER, start
+    if (serv_l->state == gs_awaiting_players) {
         if (serv_l->num_players >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
             start_game(serv_l);
-    } else {
+
+        return;
+    }
+
+    // If waiting or spectating, discard input
+    if (sess_l->state == ps_waiting || sess_l->state == ps_spectating)
+        return;
+
+    if (strlen(line) == 0) {
+        if (sess_l->state == ps_defending) {
+            if (serv_l->table.cards_played == 0)
+                respond_to_invalid_command(sess_l);
+            else {
+                switch_turn(serv_l, true);
+                send_updates_to_players(serv_l);
+            }
+        } else if (sess_l->state == ps_attacking) {
+            if (serv_l->table.cards_played == 0)
+                respond_to_invalid_command(sess_l);
+            else {
+                sess_l->state = ps_waiting;
+                // @TODO: if num_attackers = 0, next turn
+            }
+        }
+
+        return;
+    }
+
+    if (strlen(line) != 1) {
+        respond_to_invalid_command(sess_l);
+        return;
+    }
+
+    int card_int_index = card_char_index_to_int(*line);
+    if (card_int_index < 0) {
+        respond_to_invalid_command(sess_l);
+        return;
+    }
+
+    list_node_t *card_node = ll_find_at(sess_l->hand, card_int_index);
+    if (!card_node) {
+        respond_to_invalid_command(sess_l);
+        return;
+    }
+
+    card_t *card = card_node->data;
+
+    if (sess_l->state == ps_defending) {
+        if (defender_try_play_card(&serv_l->table, card, serv_l->deck.trump.suit)) {
+            ll_remove(sess_l->hand, card_node);
+            if (serv_l->table.cards_beat == MAX_TABLE_CARDS)
+                switch_turn(serv_l, false);
+
+            send_updates_to_players(serv_l);
+        } else {
+            respond_to_invalid_command(sess_l);
+            return;
+        }
+    } else if (sess_l->state == ps_attacking) {
+        if (attacker_try_play_card(&serv_l->table, card)) {
+            ll_remove(sess_l->hand, card_node);
+            send_updates_to_players(serv_l);
+            // @TODO: set all other players to attack mode
+        } else {
+            respond_to_invalid_command(sess_l);
+            return;
+        }
     }
 }
 
