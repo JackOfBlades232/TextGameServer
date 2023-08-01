@@ -5,20 +5,23 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// @TODO: remake main logic
-// @TODO: debug win-lose
-
-// @TODO: refactor and reoder/organize/factor apart functions
-// @TODO: optimize update sending (sometimes, send to only one player)
+// @TODO: remake max cards so as not to exceed the defender hand
 
 // @TODO: reset game if it was stopped, so as one server can host consecutive games
 //      (disconnections in win phase do not kill the game, 
+
+// @TODO: refactor and reoder/organize/factor apart functions
+// @TODO: optimize update sending (sometimes, send to only one player)
 
 // @TODO: add asserts to game states 
 //      (some funcs should not be called in certain states)
 
 // View
 #define CHARS_TO_TRUMP       70
+
+static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
 
 struct session_logic_tag {
     server_logic_t *serv;
@@ -148,7 +151,8 @@ void destroy_session_logic(session_logic_t *sess_l)
             sess_l->state != ps_spectating && !sess_l->interf->quit
        )
     {
-        shutdown_server_with_message(serv_l,  "\r\nA player has disconnected, thus the game can not continue. Goodbye!\r\n");
+        shutdown_server_with_message(serv_l,  
+                "\r\nA player has disconnected, thus the game can not continue. Goodbye!\r\n");
     }
 
     ll_free(sess_l->hand);
@@ -182,8 +186,6 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     table_t *table = &serv_l->table;
     card_suit_t trump_suit = serv_l->deck.trump.suit;
 
-    // @TODO: add automatic attacker forfeit in free for all when can not play
-
     // @TODO: factor apart
     if (serv_l->state == gs_first_card && sess_l->state == ps_defending) {
         // No actions can be performed by defender before first card
@@ -211,7 +213,8 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
                 respond_to_invalid_command(sess_l); // Can't forfeit when waiting for cards from attackers
             else {
                 switch_turn(serv_l, true);
-                send_updates_to_players(serv_l);
+                if (serv_l->state != gs_game_end)
+                    send_updates_to_players(serv_l);
             }
         } else if (table_is_beaten(table))
             respond_to_invalid_command(sess_l); // Cant defend at a beaten table
@@ -226,22 +229,26 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
                     switch_turn(serv_l, false);
                 else { // Once the defender, attackers get a new chance to throw in
                     enable_free_for_all(serv_l);
-                    if (serv_l->attackers_left == 0)
+                    if (serv_l->attackers_left == 0 && table_is_beaten(table))
                         switch_turn(serv_l, false);
                 }
 
-                send_updates_to_players(serv_l);
+                if (serv_l->state != gs_game_end)
+                    send_updates_to_players(serv_l);
             } else
                 respond_to_invalid_command(sess_l);
         }
     } else if (serv_l->state == gs_free_for_all && sess_l->state == ps_attacking) {
         if (strlen(line) == 0) {
             sess_l->state = ps_waiting;
+
             if (sess_l->can_attack)
                 serv_l->attackers_left--;
-            if (serv_l->attackers_left <= 0 && table_is_beaten(table))
+            if (serv_l->attackers_left == 0 && table_is_beaten(table))
                 switch_turn(serv_l, false);
-            send_updates_to_players(serv_l);
+
+            if (serv_l->state != gs_game_end)
+                send_updates_to_players(serv_l);
         } else if (table_is_full(table))
             respond_to_invalid_command(sess_l);
         else {
@@ -250,11 +257,14 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
                 respond_to_invalid_command(sess_l);
             else if (attacker_try_play_card(table, card_node->data)) {
                 ll_remove(sess_l->hand, card_node);
+
                 if (!player_can_attack(table, sess_l->hand)) {
                     sess_l->can_attack = false;
                     serv_l->attackers_left--;
                 }
-                send_updates_to_players(serv_l);
+
+                if (serv_l->state != gs_game_end)
+                    send_updates_to_players(serv_l);
             } else
                 respond_to_invalid_command(sess_l);
         }
@@ -266,7 +276,8 @@ static void shutdown_server_with_message(server_logic_t *serv_l, const char *msg
     for (int i = 0; i < serv_l->num_players; i++) {
         session_logic_t *sess_l = serv_l->players[i]; 
         if (sess_l) {
-            OUTBUF_POST(sess_l, msg);
+            if (msg)
+                OUTBUF_POSTF(sess_l, "%s%s", clrscr, msg);
             sess_l->interf->quit = true;
         }
     }
@@ -362,9 +373,7 @@ static void send_updates_to_players(server_logic_t *serv_l)
         string_builder_t *sb = sb_create();
 
         // Clear screen
-        sb_add_str(sb, "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n");
+        sb_add_str(sb, clrscr);
 
         // Player card counts
         int num_players = serv_l->num_players;
@@ -532,9 +541,10 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
 
     replenish_hands(serv_l);
 
+    // Game end check
     for (int i = 0; i < serv_l->num_players; i++) {
         session_logic_t *sess_l = serv_l->players[i];
-        if (ll_is_empty(sess_l->hand)) {
+        if (sess_l->state != ps_spectating && ll_is_empty(sess_l->hand)) {
             sess_l->state = ps_spectating;
             serv_l->num_active_players--;
         }
@@ -545,13 +555,13 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
         send_win_lose_messages_to_players(serv_l);
 
         // @TEST
-        shutdown_server_with_message(serv_l, "Goodbye!\r\n");
+        shutdown_server_with_message(serv_l, NULL);
     } else if (serv_l->num_active_players <= 0) {
         serv_l->state = gs_game_end;
         send_draw_messages_to_players(serv_l);
 
         // @TEST
-        shutdown_server_with_message(serv_l, "Goodbye!\r\n");
+        shutdown_server_with_message(serv_l, NULL);
     } else {
         serv_l->state = gs_first_card;
         advance_turns(serv_l, defender_lost ? 2 : 1);
@@ -629,14 +639,14 @@ static void send_win_lose_messages_to_players(server_logic_t *serv_l)
     for (int i = 0; i < serv_l->num_players; i++) {
         session_logic_t *sess_l = serv_l->players[i];
         if (sess_l->state == ps_spectating)
-            OUTBUF_POST(sess_l, "You've won! Kinda\r\n");
+            OUTBUF_POSTF(sess_l, "%sYou've won! Kinda\r\n", clrscr);
         else
-            OUTBUF_POST(sess_l, "You're the fool! Oopsy-daisy)\r\n");
+            OUTBUF_POSTF(sess_l, "%sYou're the fool! Oopsy-daisy)\r\n", clrscr);
     }
 }
 
 static void send_draw_messages_to_players(server_logic_t *serv_l)
 {
     for (int i = 0; i < serv_l->num_players; i++)
-        OUTBUF_POST(serv_l->players[i], "Seems that nobody is the fool today! What a pity\r\n");
+        OUTBUF_POSTF(serv_l->players[i], "%sSeems that nobody is the fool today! What a pity\r\n", clrscr);
 }
