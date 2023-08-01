@@ -5,8 +5,6 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// @TODO: remake max cards so as not to exceed the defender hand
-
 // @TODO: reset game if it was stopped, so as one server can host consecutive games
 //      (disconnections in win phase do not kill the game, 
 
@@ -185,6 +183,7 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
 
     table_t *table = &serv_l->table;
     card_suit_t trump_suit = serv_l->deck.trump.suit;
+    linked_list_t *def_hand = serv_l->players[serv_l->defender_index]->hand;
 
     // @TODO: factor apart
     if (serv_l->state == gs_first_card && sess_l->state == ps_defending) {
@@ -209,7 +208,7 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     } else if (serv_l->state == gs_free_for_all && sess_l->state == ps_defending) {
         if (strlen(line) == 0) {
             // @TODO: error if table is beaten? (by that moment attackers should be restored)
-            if (serv_l->attackers_left > 0 && !table_is_full(table))
+            if (serv_l->attackers_left > 0 && !table_is_full(table, def_hand))
                 respond_to_invalid_command(sess_l); // Can't forfeit when waiting for cards from attackers
             else {
                 switch_turn(serv_l, true);
@@ -225,7 +224,7 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
             else if (defender_try_play_card(table, card_node->data, trump_suit)) {
                 ll_remove(sess_l->hand, card_node);
 
-                if (table_is_full(table) && table_is_beaten(table))
+                if (table_is_full(table, def_hand) && table_is_beaten(table))
                     switch_turn(serv_l, false);
                 else { // Once the defender, attackers get a new chance to throw in
                     enable_free_for_all(serv_l);
@@ -249,7 +248,7 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
 
             if (serv_l->state != gs_game_end)
                 send_updates_to_players(serv_l);
-        } else if (table_is_full(table))
+        } else if (table_is_full(table, def_hand))
             respond_to_invalid_command(sess_l);
         else {
             list_node_t *card_node = try_retrieve_card_from_hand(sess_l, line);
@@ -460,7 +459,8 @@ static void sb_add_attacker_prompt(string_builder_t *sb,
 {
     table_t *t = &serv_l->table;
     list_node_t *node = hand->head;
-    if (!table_is_full(&serv_l->table)) {
+    linked_list_t *def_hand = serv_l->players[serv_l->defender_index]->hand;
+    if (!table_is_full(t, def_hand)) {
         for (int i = 0; i < hand->size; i++) {
             card_t *card = node->data;
             if (attacker_can_play_card(t, *card))
@@ -479,7 +479,7 @@ static void sb_add_defender_prompt(string_builder_t *sb,
     table_t *t = &serv_l->table;
     card_suit_t trump_suit = serv_l->deck.trump.suit;
     list_node_t *node = hand->head;
-    if (!table_is_beaten(&serv_l->table)) {
+    if (!table_is_beaten(t)) {
         for (int i = 0; i < hand->size; i++) {
             card_t *card = node->data;
             if (defender_can_play_card(t, *card, trump_suit))

@@ -9,6 +9,9 @@
 typedef int       bool;
 #define true      1
 #define false     0
+
+#define MAX(_a, _b) (_a < _b ? _b : _a)
+#define MIN(_a, _b) (_a < _b ? _a : _b)
  
 #define LOG_ERR(_fmt, ...) fprintf(stderr, "[ERR] (%s:%d: errno: %s) " _fmt "\n", \
         __FILE__, __LINE__, (errno == 0 ? "None" : strerror(errno)), ##__VA_ARGS__)

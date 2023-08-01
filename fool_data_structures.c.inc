@@ -2,11 +2,11 @@
 #include "utils.h"
 
 #define NUM_SUITS            4
-//#define NUM_VALS             13
-#define NUM_VALS             3
+#define NUM_VALS             13
+//#define NUM_VALS             3
 
 #define BASE_PLAYER_CARDS    6
-#define MAX_TABLE_CARDS      6
+#define MAX_TABLE_CARDS      BASE_PLAYER_CARDS
 #define MIN_PLAYERS_PER_GAME 2
 #define DECK_SIZE            NUM_SUITS*NUM_VALS
 #define MAX_PLAYERS_PER_GAME DECK_SIZE/BASE_PLAYER_CARDS
@@ -92,9 +92,9 @@ static inline bool table_is_beaten(table_t *t)
     return t->cards_played <= t->cards_beat;
 }
 
-static inline bool table_is_full(table_t *t)
+static inline bool table_is_full(table_t *t, linked_list_t *defender_hand)
 {
-    return t->cards_played >= MAX_TABLE_CARDS;
+    return t->cards_played >= MIN(defender_hand->size, MAX_TABLE_CARDS);
 }
 
 static void generate_deck(deck_t *d)
