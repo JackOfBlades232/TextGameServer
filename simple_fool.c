@@ -12,6 +12,12 @@
 // @TODO: reset game if it was stopped somehow
 // @TODO: highlight the defending player somehow
 
+// @TODO: add asserts to game states 
+//      (some funcs should not be called in certain states)
+
+// @IDEA: right now everybody has to manually forfeit the attack.
+//      It would be better to forfeit automatically if nobody can play anything
+
 #define NUM_SUITS            4
 #define NUM_VALS             13
 
@@ -98,6 +104,11 @@ static inline bool deck_size(deck_t *d)
 static inline bool deck_is_empty(deck_t *d)
 {
     return deck_size(d) <= 0;
+}
+
+static inline bool table_is_beaten(table_t *t)
+{
+    return t->cards_played <= t->cards_beat;
 }
 
 static void generate_deck(deck_t *d)
@@ -220,6 +231,7 @@ struct server_logic_tag {
     game_state_t state;
     int defender_index;
     int attacker_index;
+    int attackers_left;
 
     deck_t deck;
     table_t table;
@@ -293,8 +305,7 @@ static void choose_first_turn(server_logic_t *serv_l)
 
     serv_l->players[serv_l->defender_index]->state = ps_defending;
     serv_l->players[serv_l->attacker_index]->state = ps_attacking;
-
-    // @TODO: set player states
+    serv_l->attackers_left = 1;
 }
 
 static void sb_add_card(string_builder_t *sb, card_t card)
@@ -580,9 +591,20 @@ static void advance_turns(server_logic_t *serv_l, int num_turns)
     while (serv_l->players[serv_l->defender_index]->state == ps_spectating)
         dec_cycl(&serv_l->defender_index, serv_l->num_players);
 
-    // @TODO: reset all other states to waiting
-    serv_l->players[serv_l->defender_index]->state = ps_defending;
     serv_l->players[serv_l->attacker_index]->state = ps_attacking;
+    serv_l->players[serv_l->defender_index]->state = ps_defending;
+    for (int i = 0; i < serv_l->num_players; i++) {
+        if (
+                i != serv_l->attacker_index && 
+                i != serv_l->defender_index &&
+                serv_l->players[i]->state != ps_spectating
+           )
+        {
+            serv_l->players[i]->state = ps_waiting;
+        }
+    }
+
+    serv_l->attackers_left = 1;
 }
 
 static void switch_turn(server_logic_t *serv_l, bool defender_lost)
@@ -598,7 +620,19 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
         advance_turns(serv_l, 1);
     }
 
+    serv_l->state = gs_first_card;
     replenish_hands(serv_l);
+}
+
+static void enable_free_for_all(server_logic_t *serv_l)
+{
+    serv_l->state = gs_free_for_all;
+    for (int i = 0; i < serv_l->num_players; i++) {
+        if (serv_l->players[i]->state == ps_waiting) {
+            serv_l->players[i]->state = ps_attacking;
+            serv_l->attackers_left++;
+        }
+    }
 }
 
 // @TODO: refac
@@ -620,18 +654,22 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
 
     if (strlen(line) == 0) {
         if (sess_l->state == ps_defending) {
-            if (serv_l->table.cards_played == 0)
+            if (serv_l->state == gs_first_card)
                 respond_to_invalid_command(sess_l);
             else {
                 switch_turn(serv_l, true);
                 send_updates_to_players(serv_l);
             }
         } else if (sess_l->state == ps_attacking) {
-            if (serv_l->table.cards_played == 0)
+            if (serv_l->state == gs_first_card)
                 respond_to_invalid_command(sess_l);
             else {
                 sess_l->state = ps_waiting;
-                // @TODO: if num_attackers = 0, next turn
+                serv_l->attackers_left--;
+                if (serv_l->attackers_left <= 0 && table_is_beaten(&serv_l->table)) {
+                    switch_turn(serv_l, false);
+                    send_updates_to_players(serv_l);
+                }
             }
         }
 
@@ -660,8 +698,13 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     if (sess_l->state == ps_defending) {
         if (defender_try_play_card(&serv_l->table, card, serv_l->deck.trump.suit)) {
             ll_remove(sess_l->hand, card_node);
-            if (serv_l->table.cards_beat == MAX_TABLE_CARDS)
+            if (
+                    serv_l->table.cards_beat == MAX_TABLE_CARDS ||
+                    (serv_l->attackers_left <= 0 && table_is_beaten(&serv_l->table))
+               )
+            {
                 switch_turn(serv_l, false);
+            }
 
             send_updates_to_players(serv_l);
         } else {
@@ -671,8 +714,10 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     } else if (sess_l->state == ps_attacking) {
         if (attacker_try_play_card(&serv_l->table, card)) {
             ll_remove(sess_l->hand, card_node);
+            if (serv_l->state == gs_first_card)
+                enable_free_for_all(serv_l);
+
             send_updates_to_players(serv_l);
-            // @TODO: set all other players to attack mode
         } else {
             respond_to_invalid_command(sess_l);
             return;
