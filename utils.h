@@ -24,7 +24,7 @@ void ll_push_front(linked_list_t *list, void *data);
 bool ll_remove(linked_list_t *list, list_node_t *node);
 bool ll_remove_at(linked_list_t *list, int idx);
 
-inline bool ll_is_empty(linked_list_t *list) { return list->size == 0; }
+static inline bool ll_is_empty(linked_list_t *list) { return list->size == 0; }
 
 typedef struct string_builder_tag string_builder_t;
 
