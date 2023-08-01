@@ -201,3 +201,17 @@ static bool defender_try_play_card(table_t *t, card_t *c, card_suit_t trump_suit
     t->faceoffs[t->cards_beat++][1] = c;
     return true;
 }
+
+static bool player_can_attack(table_t *t, linked_list_t *hand)
+{
+    list_node_t *node = hand->head;
+    while (node) {
+        card_t *card = node->data;
+        if (attacker_can_play_card(t, *card))
+            return true;
+
+        node = node->next;
+    }
+
+    return false;
+}

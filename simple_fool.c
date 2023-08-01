@@ -13,7 +13,6 @@
 
 // @TODO: reset game if it was stopped, so as one server can host consecutive games
 //      (disconnections in win phase do not kill the game, 
-// @TODO: highlight the defending player somehow
 
 // @TODO: add asserts to game states 
 //      (some funcs should not be called in certain states)
@@ -225,8 +224,11 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
 
                 if (table_is_full(table) && table_is_beaten(table))
                     switch_turn(serv_l, false);
-                else // Once the defender, attackers get a new chance to throw in
+                else { // Once the defender, attackers get a new chance to throw in
                     enable_free_for_all(serv_l);
+                    if (serv_l->attackers_left == 0)
+                        switch_turn(serv_l, false);
+                }
 
                 send_updates_to_players(serv_l);
             } else
@@ -235,10 +237,10 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     } else if (serv_l->state == gs_free_for_all && sess_l->state == ps_attacking) {
         if (strlen(line) == 0) {
             sess_l->state = ps_waiting;
-            // @HERE
-            serv_l->attackers_left--;
+            if (sess_l->can_attack)
+                serv_l->attackers_left--;
             if (serv_l->attackers_left <= 0 && table_is_beaten(table))
-                switch_turn(serv_l, true);
+                switch_turn(serv_l, false);
             send_updates_to_players(serv_l);
         } else if (table_is_full(table))
             respond_to_invalid_command(sess_l);
@@ -248,6 +250,10 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
                 respond_to_invalid_command(sess_l);
             else if (attacker_try_play_card(table, card_node->data)) {
                 ll_remove(sess_l->hand, card_node);
+                if (!player_can_attack(table, sess_l->hand)) {
+                    sess_l->can_attack = false;
+                    serv_l->attackers_left--;
+                }
                 send_updates_to_players(serv_l);
             } else
                 respond_to_invalid_command(sess_l);
@@ -369,7 +375,8 @@ static void send_updates_to_players(server_logic_t *serv_l)
                 dec_cycl(&player_idx, num_players))
         {
             session_logic_t *player = serv_l->players[player_idx];
-            chars_used += sb_add_strf(sb, "< %d >   ", player->hand->size);
+            const char *fmt = player_idx == serv_l->defender_index ? "| %d |   " : "< %d >   ";
+            chars_used += sb_add_strf(sb, fmt, player->hand->size);
         }
 
         // Deck info: trump & remaining cards
@@ -554,12 +561,22 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
 static void enable_free_for_all(server_logic_t *serv_l)
 {
     serv_l->state = gs_free_for_all;
+    serv_l->attackers_left = 0;
+
+    table_t *table = &serv_l->table;
     for (int i = 0; i < serv_l->num_players; i++) {
-        if (serv_l->players[i]->state == ps_waiting) {
-            serv_l->players[i]->state = ps_attacking;
-            // @HERE
-            serv_l->attackers_left++;
-        }
+        session_logic_t *sess_l = serv_l->players[i];
+        if (sess_l->state == ps_waiting)
+            sess_l->state = ps_attacking;
+
+        // Only count those attackers that can do smth
+        if (sess_l->state == ps_attacking) {
+            if (player_can_attack(table, sess_l->hand)) {
+                sess_l->can_attack = true;
+                serv_l->attackers_left++;
+            } else 
+                sess_l->can_attack = false;
+        } 
     }
 }
 
