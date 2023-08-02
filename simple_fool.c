@@ -1,22 +1,18 @@
 /* TextGameServer/simple_fool.c */
 #include "logic.h"
 #include "utils.h"
-#include "fool_data_structures.c.inc"
+#include "fool_data_structures.c"
 #include <stdlib.h>
 #include <limits.h>
 
-// @TODO: reset game if it was stopped, so as one server can host consecutive games
-//      (disconnections in win phase do not kill the game, 
-
 // @TODO: refactor and reoder/organize/factor apart functions
-// @TODO: optimize update sending (sometimes, send to only one player)
 
 // @TODO: add asserts to game states 
 //      (some funcs should not be called in certain states)
+// @TODO: optimize update sending (sometimes, send to only one player)
 
 // View
 #define CHARS_TO_TRUMP       70
-
 static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
                        "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
                        "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
@@ -58,24 +54,14 @@ struct server_logic_tag {
     _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
 } while (0)
 
+static void reset_server_logic(server_logic_t *serv_l);
+
 server_logic_t *make_server_logic()
 {
-    server_logic_t *serv = malloc(sizeof(*serv));
+    server_logic_t *serv_l = malloc(sizeof(*serv_l));
+    reset_server_logic(serv_l);
 
-    for (int i = 0; i < MAX_PLAYERS_PER_GAME; i++)
-        serv->players[i] = NULL;
-    serv->num_players = 0;
-    serv->num_active_players = 0;
-
-    serv->state = gs_awaiting_players;
-    serv->defender_index = 0;
-    serv->attacker_index = 0;
-    serv->attackers_left = 0;
-
-    generate_deck(&serv->deck);
-    reset_table(&serv->table);
-
-    return serv;
+    return serv_l;
 }
 
 void destroy_server_logic(server_logic_t *serv_l)
@@ -120,7 +106,7 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
     return sess;
 }
 
-static void shutdown_server_with_message(server_logic_t *serv_l, const char *msg);
+static void end_game_with_message(server_logic_t *serv_l, const char *msg);
 
 void destroy_session_logic(session_logic_t *sess_l)
 {
@@ -149,7 +135,7 @@ void destroy_session_logic(session_logic_t *sess_l)
             sess_l->state != ps_spectating && !sess_l->interf->quit
        )
     {
-        shutdown_server_with_message(serv_l,  
+        end_game_with_message(serv_l,  
                 "\r\nA player has disconnected, thus the game can not continue. Goodbye!\r\n");
     }
 
@@ -270,7 +256,7 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     }
 }
 
-static void shutdown_server_with_message(server_logic_t *serv_l, const char *msg)
+static void end_game_with_message(server_logic_t *serv_l, const char *msg)
 {
     for (int i = 0; i < serv_l->num_players; i++) {
         session_logic_t *sess_l = serv_l->players[i]; 
@@ -280,6 +266,24 @@ static void shutdown_server_with_message(server_logic_t *serv_l, const char *msg
             sess_l->interf->quit = true;
         }
     }
+
+    reset_server_logic(serv_l);
+}
+
+static void reset_server_logic(server_logic_t *serv_l)
+{
+    for (int i = 0; i < MAX_PLAYERS_PER_GAME; i++)
+        serv_l->players[i] = NULL;
+    serv_l->num_players = 0;
+    serv_l->num_active_players = 0;
+
+    serv_l->state = gs_awaiting_players;
+    serv_l->defender_index = 0;
+    serv_l->attacker_index = 0;
+    serv_l->attackers_left = 0;
+
+    generate_deck(&serv_l->deck);
+    reset_table(&serv_l->table);
 }
 
 static void replenish_hands(server_logic_t *serv_l);
@@ -555,13 +559,13 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
         send_win_lose_messages_to_players(serv_l);
 
         // @TEST
-        shutdown_server_with_message(serv_l, NULL);
+        end_game_with_message(serv_l, NULL);
     } else if (serv_l->num_active_players <= 0) {
         serv_l->state = gs_game_end;
         send_draw_messages_to_players(serv_l);
 
         // @TEST
-        shutdown_server_with_message(serv_l, NULL);
+        end_game_with_message(serv_l, NULL);
     } else {
         serv_l->state = gs_first_card;
         advance_turns(serv_l, defender_lost ? 2 : 1);
@@ -604,9 +608,8 @@ static list_node_t *try_retrieve_card_from_hand(session_logic_t *sess_l, const c
 // @TODO: refac
 static void advance_turns(server_logic_t *serv_l, int num_turns)
 {
-    ASSERT(num_turns > 0);
+    ASSERT(num_turns > 0 && serv_l->num_active_players > 1);
 
-    // @TODO: this becomes inf loop if somebody wins (<= 1 non-spectator)
     while (num_turns > 0) {
         dec_cycl(&serv_l->attacker_index, serv_l->num_players);
         if (serv_l->players[serv_l->attacker_index]->state != ps_spectating)

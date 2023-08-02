@@ -1,9 +1,9 @@
-/* TextGameServer/fool_data_structures.c.inc */
+/* TextGameServer/fool_data_structures.c */
 #include "utils.h"
 
 #define NUM_SUITS            4
-#define NUM_VALS             13
-//#define NUM_VALS             3
+//#define NUM_VALS             13
+#define NUM_VALS             3
 
 #define BASE_PLAYER_CARDS    6
 #define MAX_TABLE_CARDS      BASE_PLAYER_CARDS
@@ -94,7 +94,7 @@ static inline bool table_is_beaten(table_t *t)
 
 static inline bool table_is_full(table_t *t, linked_list_t *defender_hand)
 {
-    return t->cards_played >= MIN(defender_hand->size, MAX_TABLE_CARDS);
+    return t->cards_played >= MIN(defender_hand->size + t->cards_beat, MAX_TABLE_CARDS);
 }
 
 static void generate_deck(deck_t *d)
