@@ -4,6 +4,14 @@
 
 #include "defs.h"
 
+typedef struct logic_state_functable_tag logic_state_functable_t;
+
+typedef struct server_logic_tag {
+    logic_state_functable_t *functable;
+    
+    void *data;
+} server_logic_t;
+
 typedef struct session_interface_tag {
     char *out_buf;
     int out_buf_len;
@@ -14,16 +22,25 @@ typedef struct session_logic_tag {
     server_logic_t *serv;
     session_interface_t *interf;
 
-    void *specific_state;
+    void *data;
 } session_logic_t;
 
-typedef struct server_logic_tag {
-    // @TODO: insert functable ptr
-    
-    void *specific_state;
-} server_logic_t;
+// Functions for working with session/server data & interface in different logic modules
+typedef void (*init_serv_func_t)(server_logic_t *);
+typedef void (*deinit_serv_func_t)(server_logic_t *);
+typedef void (*init_sess_func_t)(session_logic_t *);
+typedef void (*deinit_sess_func_t)(session_logic_t *);
+typedef void (*state_process_line_func_t)(session_logic_t *, const char *);
 
-server_logic_t *make_server_logic(); // @TODO: insert functable ptr
+struct logic_state_functable_tag {
+    init_serv_func_t           init_serv_f;
+    deinit_serv_func_t         deinit_serv_f;
+    init_sess_func_t           init_sess_f;
+    deinit_sess_func_t         deinit_sess_f;
+    state_process_line_func_t  process_line_f;
+};
+
+server_logic_t *make_server_logic(logic_state_functable_t *functable);
 void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_s,
                                     session_interface_t *interf);

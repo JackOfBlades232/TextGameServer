@@ -13,9 +13,9 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: remake server_logic_t and session_logic_t to be non-opaque with impl-specific state as void *
-// @TODO: add func-table type, move fool impl to impls.h/c file and define a func table (create serv from func table ref)
-// @TODO: make logic.h/c have functions that call into the table, and test correctness on fool
+#include "module_functables.h"
+
+// @TODO: reimplement server
 
 // @TODO: implement serv_logic_t array and distribution on connect (connect player to non-full server if possible)
 // @TODO: implement separate hub container
@@ -152,7 +152,8 @@ void server_init(server *serv, int port)
     serv->sessions = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->sessions));
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
-    serv->logic = make_server_logic();
+    // @TEST
+    serv->logic = make_server_logic(&fool_functable);
     ASSERT(serv->logic);
 }
 
