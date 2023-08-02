@@ -16,9 +16,6 @@
 // @TODO: implement variation with threads
 // @TODO: implement normal quit on ^C
 
-// @IDEA: maybe I should only allow reading or writing at a time
-//      (read line, then respond, and so on)
-
 #define LISTEN_QLEN 16
 #define INIT_SESS_ARR_SIZE 32
 #define INBUFSIZE 1024
@@ -56,7 +53,6 @@ session *make_session(int fd, server *serv)
 
 void cleanup_session(session *sess)
 {
-    // @TODO: defer freeing to poster?
     if (sess->l_interf.out_buf) free(sess->l_interf.out_buf);
     if (sess->logic) destroy_session_logic(sess->logic);
 }
@@ -111,13 +107,10 @@ bool session_do_write(session *sess)
 {
     ASSERT(sess->l_interf.out_buf && sess->l_interf.out_buf_len > 0);
 
-    // @TODO: Implement cutting up
+    // @TODO: Implement cutting up?
     int wc = write(sess->fd, 
                    sess->l_interf.out_buf, 
                    sess->l_interf.out_buf_len);
-    // @IDEA: I might want to pass static references here, maybe let
-    // the logic deal with out_buf lifetime? But then the server should notify
-    // logic of when the out_buf is sent
     free(sess->l_interf.out_buf);
     sess->l_interf.out_buf = NULL;
     sess->l_interf.out_buf_len = 0;

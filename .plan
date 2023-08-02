@@ -1,6 +1,6 @@
 = Single-session fool game =
     * Make main server framework
-    - Create logic
+    * Create logic
 
 = Multi-session fool game =
     - Create simple multisessioning (once one has started, create new)

@@ -23,4 +23,18 @@ void session_logic_process_line(session_logic_t *sess_s, const char *line);
 // Not passing the line in, just process the event (like send smth and quit)
 void session_logic_process_too_long_line(session_logic_t *sess_l);
 
+// Universal utility macros for posting responses
+#define OUTBUF_POST(_sess_l, _str) do { \
+    if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
+    _sess_l->interf->out_buf = strdup(_str); \
+    _sess_l->interf->out_buf_len = strlen(_sess_l->interf->out_buf); \
+} while (0)
+
+#define OUTBUF_POSTF(_sess_l, _fmt, ...) do { \
+    if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
+    size_t req_size = snprintf(NULL, 0, _fmt, ##__VA_ARGS__) + 1; \
+    _sess_l->interf->out_buf = malloc(req_size * sizeof(*_sess_l->interf->out_buf)); \
+    _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
+} while (0)
+
 #endif

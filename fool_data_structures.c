@@ -2,8 +2,7 @@
 #include "utils.h"
 
 #define NUM_SUITS            4
-//#define NUM_VALS             13
-#define NUM_VALS             3
+#define NUM_VALS             13
 
 #define BASE_PLAYER_CARDS    6
 #define MAX_TABLE_CARDS      BASE_PLAYER_CARDS

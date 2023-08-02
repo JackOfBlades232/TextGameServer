@@ -5,10 +5,6 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// @TODO: add asserts to game states 
-//      (some funcs should not be called in certain states)
-// @TODO: optimize update sending (sometimes, send to only one player)
-
 // View
 #define CHARS_TO_TRUMP       70
 static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
@@ -159,9 +155,9 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
     if (serv_l->state == gs_awaiting_players) {
         if (serv_l->num_players >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
             start_game(serv_l);
-
         return;
-    }
+    } else if (serv_l->state == gs_game_end)
+        return;
 
     if (serv_l->state == gs_first_card && sess_l->state == ps_defending)
         process_defender_first_card(sess_l, serv_l, line);
@@ -171,7 +167,6 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
         process_defender_in_free_for_all(sess_l, serv_l, line);
     else if (serv_l->state == gs_free_for_all && sess_l->state == ps_attacking)
         process_attacker_in_free_for_all(sess_l, serv_l, line);
-    
 }
 
 static void end_game_with_message(server_logic_t *serv_l, const char *msg)
@@ -201,9 +196,6 @@ static void reset_server_logic(server_logic_t *serv_l)
     serv_l->defender_index = 0;
     serv_l->attacker_index = 0;
     serv_l->attackers_left = 0;
-
-    generate_deck(&serv_l->deck);
-    reset_table(&serv_l->table);
 }
 
 static void send_updates_to_players(server_logic_t *serv_l);
@@ -213,7 +205,11 @@ static void choose_first_turn(server_logic_t *serv_l);
 
 static void start_game(server_logic_t *serv_l)
 {
+    ASSERT(serv_l->state == gs_awaiting_players);
     ASSERT(serv_l->num_players >= MIN_PLAYERS_PER_GAME);
+
+    generate_deck(&serv_l->deck);
+    reset_table(&serv_l->table);
 
     serv_l->state = gs_first_card;
     serv_l->num_active_players = serv_l->num_players;
@@ -226,6 +222,8 @@ static void start_game(server_logic_t *serv_l)
 
 static void replenish_hands(server_logic_t *serv_l)
 {
+    ASSERT(serv_l->state == gs_first_card || serv_l->state == gs_free_for_all);
+
     int player_idx = serv_l->attacker_index;
 
     for (int i = 0; i < serv_l->num_players; i++)
@@ -253,6 +251,8 @@ loop_brk:
 
 static void choose_first_turn(server_logic_t *serv_l)
 {
+    ASSERT(serv_l->state == gs_first_card);
+
     // Choose player with the lowest trump card
     int min_card_val = INT_MAX;
     for (int i = 0; i < serv_l->num_players; i++)
@@ -288,6 +288,8 @@ static list_node_t *try_retrieve_card_from_hand(session_logic_t *sess_l, const c
 
 static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
 {
+    ASSERT(serv_l->state == gs_first_card && sess_l->state == ps_attacking);
+
     table_t *table = &serv_l->table;
 
     if (strlen(line) == 0) // Chosen attacker can not forfeit first round
@@ -309,12 +311,16 @@ static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t 
 
 static void process_defender_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
 {
+    ASSERT(serv_l->state == gs_first_card && sess_l->state == ps_defending);
+
     // No actions can be performed by defender before first card
     respond_to_invalid_command(sess_l);
 }
 
 static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
 {
+    ASSERT(serv_l->state == gs_free_for_all && sess_l->state == ps_attacking);
+
     table_t *table = &serv_l->table;
     linked_list_t *def_hand = serv_l->players[serv_l->defender_index]->hand;
 
@@ -351,6 +357,8 @@ static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_log
 
 static void process_defender_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
 {
+    ASSERT(serv_l->state == gs_free_for_all && sess_l->state == ps_defending);
+
     table_t *table = &serv_l->table;
     linked_list_t *def_hand = serv_l->players[serv_l->defender_index]->hand;
     card_suit_t trump_suit = serv_l->deck.trump.suit;
@@ -399,7 +407,7 @@ static void sb_add_card(string_builder_t *sb, card_t card);
 static void send_updates_to_players(server_logic_t *serv_l)
 {
     for (int i = 0; i < serv_l->num_players; i++) {
-        session_logic_t *player_sess = serv_l->players[i];
+        session_logic_t *sess_l = serv_l->players[i];
         string_builder_t *sb = sb_create();
 
         // Clear screen
@@ -441,7 +449,7 @@ static void send_updates_to_players(server_logic_t *serv_l)
         }
 
         // Hand
-        linked_list_t *hand = player_sess->hand;
+        linked_list_t *hand = sess_l->hand;
         list_node_t *node = hand->head;
         for (int i = 0; i < hand->size; i++) {
             card_t *card = node->data;
@@ -455,13 +463,13 @@ static void send_updates_to_players(server_logic_t *serv_l)
         sb_add_str(sb, "\r\n");
 
         // Prompts
-        if (player_sess->state == ps_attacking)
-            sb_add_attacker_prompt(sb, player_sess->hand, serv_l);
-        else if (player_sess->state == ps_defending)
-            sb_add_defender_prompt(sb, player_sess->hand, serv_l);
+        if (sess_l->state == ps_attacking)
+            sb_add_attacker_prompt(sb, sess_l->hand, serv_l);
+        else if (sess_l->state == ps_defending)
+            sb_add_defender_prompt(sb, sess_l->hand, serv_l);
 
         char *full_str = sb_build_string(sb);
-        OUTBUF_POST(player_sess, full_str);
+        OUTBUF_POST(sess_l, full_str);
         free(full_str);
         sb_free(sb);
     }
