@@ -35,19 +35,6 @@ struct server_logic_tag {
     table_t table;
 };
 
-#define OUTBUF_POST(_sess_l, _str) do { \
-    if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
-    _sess_l->interf->out_buf = strdup(_str); \
-    _sess_l->interf->out_buf_len = strlen(_sess_l->interf->out_buf); \
-} while (0)
-
-#define OUTBUF_POSTF(_sess_l, _fmt, ...) do { \
-    if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
-    size_t req_size = snprintf(NULL, 0, _fmt, ##__VA_ARGS__) + 1; \
-    _sess_l->interf->out_buf = malloc(req_size * sizeof(*_sess_l->interf->out_buf)); \
-    _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
-} while (0)
-
 static void reset_server_logic(server_logic_t *serv_l);
 
 server_logic_t *make_server_logic()
@@ -478,8 +465,7 @@ static void send_updates_to_players(server_logic_t *serv_l)
 static void respond_to_invalid_command(session_logic_t *sess_l)
 {
     string_builder_t *sb = sb_create();
-    sb_add_str(sb, "Invalid command! Please type in one of the available letters, or just press ENTER to skip turn\r\n"
-                   "If you are the first attacker, or defending with an empty table, you can not skip your turn\r\n");
+    sb_add_str(sb, "The command is invalid or can not be used now\r\n");
 
     if (sess_l->state == ps_attacking)
         sb_add_attacker_prompt(sb, sess_l->hand, sess_l->serv);
