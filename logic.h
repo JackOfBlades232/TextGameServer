@@ -10,10 +10,20 @@ typedef struct session_interface_tag {
     bool quit;
 } session_interface_t;
 
-typedef struct session_logic_tag session_logic_t;
-typedef struct server_logic_tag server_logic_t;
+typedef struct session_logic_tag {
+    server_logic_t *serv;
+    session_interface_t *interf;
 
-server_logic_t *make_server_logic();
+    void *specific_state;
+} session_logic_t;
+
+typedef struct server_logic_tag {
+    // @TODO: insert functable ptr
+    
+    void *specific_state;
+} server_logic_t;
+
+server_logic_t *make_server_logic(); // @TODO: insert functable ptr
 void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_s,
                                     session_interface_t *interf);

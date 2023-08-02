@@ -5,22 +5,13 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// View
-#define CHARS_TO_TRUMP       70
-static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
-
-struct session_logic_tag {
-    server_logic_t *serv;
-    session_interface_t *interf;
-
+typedef struct fool_session_state_tag {
     player_state_t state;
     linked_list_t *hand;
     bool can_attack;
-};
+} fool_session_state_t;
 
-struct server_logic_tag {
+typedef struct fool_server_state_tag {
     session_logic_t *players[MAX_PLAYERS_PER_GAME];
     int num_players;
 
@@ -33,7 +24,13 @@ struct server_logic_tag {
 
     deck_t deck;
     table_t table;
-};
+} fool_server_state_t;
+
+// View
+#define CHARS_TO_TRUMP       70
+static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
 
 static void reset_server_logic(server_logic_t *serv_l);
 

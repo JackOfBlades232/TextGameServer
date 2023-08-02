@@ -13,7 +13,15 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement variation with threads
+// @TODO: remake server_logic_t and session_logic_t to be non-opaque with impl-specific state as void *
+// @TODO: add func-table type, move fool impl to impls.h/c file and define a func table (create serv from func table ref)
+// @TODO: make logic.h/c have functions that call into the table, and test correctness on fool
+
+// @TODO: implement serv_logic_t array and distribution on connect (connect player to non-full server if possible)
+// @TODO: implement separate hub container
+
+// @TODO: implement variation with threads (one thread deals with a subset of containers)
+//      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
 // @TODO: implement normal quit on ^C
 
 #define LISTEN_QLEN 16

@@ -3,13 +3,13 @@
     * Create logic
 
 = Multi-session fool game =
-    - Create simple multisessioning (once one has started, create new)
+    - Create simple multisessioning (once one has started, create new) (trouble -- how to connect multiple logics?)
     - Add passwd and logging in
     - Create real-time chat
     - Add spec command to chat to create/join game with id
+    - Create in-game nicknames and chat
 
 = Implement another text game & make server multi-game =
     - Create a riddles game
         (one player sends riddle and answers, the other one guesses)
     - Rewire main server so as to be able to choose between games
-    - Create more games?
