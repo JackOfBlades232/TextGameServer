@@ -14,7 +14,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement serv_logic_t array and distribution on connect (connect player to non-full server if possible)
 // @TODO: implement separate hub container
 
 // @TODO: implement variation with threads (one thread deals with a subset of containers)
@@ -25,7 +24,7 @@
 
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32
-#define INIT_ROOMS_ARR_SIZE  1
+#define INIT_ROOMS_ARR_SIZE  4
 #define INBUFSIZE            1024
 
 typedef struct session_tag {
@@ -195,8 +194,6 @@ void server_accept_client(server *serv)
             for (int j = serv->rooms_size; j < newsize; j++)
                 serv->rooms[j] = NULL;
             serv->rooms_size = newsize;
-
-            printf("Reallocated to %d\n", serv->rooms_size);
 
             room = make_server_logic(&fool_functable);
             serv->rooms[i] = room;
