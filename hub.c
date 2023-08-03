@@ -15,15 +15,12 @@
 // @TODO: generalize file path specification?
 static const char passwd_path[] = "./passwd.txt";
 
-// @TODO: add list command to list all rooms
-// @TODO: remake join to be room-targeted
-// @TODO: add create command
-
-// @TODO: on bad credentials return the user to init state
 // @TODO: should i lock logged in users?
 // @TODO: add backspace redrawing to chat of your unfinished message
 
-// @HUH: should there be some room-deleting rule?
+// @HUH: add temp room deletion and array shrinkage (or, alternatively, limit for rooms)
+
+// @TODO: refac
 
 typedef enum hub_user_state_tag {
     hs_input_username,
@@ -138,6 +135,9 @@ static char *lookup_username_and_get_password(hub_server_data_t *sv_data, const 
 static bool add_user(hub_server_data_t *sv_data, const char *usernm, const char *passwd);
 
 static void forward_message_to_all_users(server_logic_t *serv_l, session_logic_t *sess_l, const char *msg);
+static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l);
+static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_data);
+static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *sv_data, const char *room_name);
 
 // @TODO: refac
 void hub_process_line(session_logic_t *sess_l, const char *line)
@@ -167,8 +167,8 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\nYou: ", clrscr);
                     s_data->state = hs_global_chat;
                 } else {
-                    OUTBUF_POST(sess_l, "The password is incorrect! Rack your memory and try again later\r\n");
-                    sess_l->interf->quit = true;
+                    s_data->state = hs_input_username;
+                    OUTBUF_POST(sess_l, "The password is incorrect! Rack your memory and try again\r\nInput your username: ");
                 }
                 free(s_data->expected_password);
                 s_data->expected_password = NULL;
@@ -180,50 +180,22 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\nYou: ", clrscr);
                     s_data->state = hs_global_chat;
                 } else {
-                    OUTBUF_POST(sess_l, "The username or password is invalid, try registering again\r\n");
-                    sess_l->interf->quit = true;
+                    s_data->state = hs_input_username;
+                    OUTBUF_POST(sess_l, "The username or password is invalid, try registering again\r\nInput your username: ");
                 }
             } break;
 
         case hs_global_chat:
             {
-                // @TEST
                 if (strlen(line) == 0)
                     OUTBUF_POST(sess_l, "You: ");
-                else if (streq(line, "join")) {
-                    // @TEST (just try to connect to first available room on printing smth)
-                    server_logic_t *room;
-                    for (int i = 0; i <= sv_data->rooms_size; i++) {
-                        char id[16];
-
-                        if (i == sv_data->rooms_size) {
-                            int newsize = sv_data->rooms_size + INIT_ROOMS_ARR_SIZE;
-                            sv_data->rooms = 
-                                realloc(sv_data->rooms, newsize * sizeof(*sv_data->rooms));
-                            for (int j = sv_data->rooms_size; j < newsize; j++)
-                                sv_data->rooms[j] = NULL;
-                            sv_data->rooms_size = newsize;
-
-                            // @TEST
-                            sprintf(id, "%d", i);
-                            room = make_server_logic(&fool_preset, id);
-                            sv_data->rooms[i] = room;
-                            break;
-                        }
-
-                        room = sv_data->rooms[i];
-                        if (!room) {
-                            // @TEST
-                            sprintf(id, "%d", i);
-                            room = make_server_logic(&fool_preset, id);
-                            sv_data->rooms[i] = room;
-                            break;
-                        } else if (server_logic_is_available(room))
-                            break;
-                    }
-
-                    sess_l->interf->next_room = room;
-                } else {
+                else if (streq(line, "list"))
+                    send_rooms_list(sess_l, serv_l); 
+                else if (streq(line, "create"))
+                    create_and_join_room(sess_l, sv_data);
+                else if (strncmp(line, "join ", 5) == 0)
+                    try_join_existing_room(sess_l, sv_data, line+5);
+                else {
                     forward_message_to_all_users(serv_l, sess_l, line);
                     OUTBUF_POST(sess_l, "You: ");
                 }
@@ -305,4 +277,70 @@ static void forward_message_to_all_users(server_logic_t *serv_l, session_logic_t
         if (other_sess_l != sess_l)
             OUTBUF_POSTF(other_sess_l, "\r\n%s: %s\r\nYou: ", sess_l->username, msg);
     }
+}
+
+static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)
+{
+    hub_server_data_t *sv_data = serv_l->data;
+    string_builder_t *sb = sb_create();
+    sb_add_str(sb, "\r\nServer rooms:\r\n");
+    for (int i = 0; i < sv_data->rooms_size; i++) {
+        server_logic_t *room = sv_data->rooms[i];
+        if (room)
+            sb_add_strf(sb, "   %s %d/%d %s\r\n", room->name,
+                    room->sess_cnt, room->sess_cap,
+                    server_logic_is_available(room) ? "" : "(closed)");
+    }
+    sb_add_str(sb, "\r\nYou: ");
+
+    char *full_str = sb_build_string(sb);
+    OUTBUF_POST(sess_l, full_str);
+    free(full_str);
+    sb_free(sb);
+}
+
+static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_data)
+{
+    server_logic_t *room;
+    for (int i = 0; i <= sv_data->rooms_size; i++) {
+        char id[16];
+
+        if (i == sv_data->rooms_size) {
+            int newsize = sv_data->rooms_size + INIT_ROOMS_ARR_SIZE;
+            sv_data->rooms = 
+                realloc(sv_data->rooms, newsize * sizeof(*sv_data->rooms));
+            for (int j = sv_data->rooms_size; j < newsize; j++)
+                sv_data->rooms[j] = NULL;
+            sv_data->rooms_size = newsize;
+
+            // @TODO: factor out?
+            sprintf(id, "%d", i);
+            room = make_server_logic(&fool_preset, id);
+            sv_data->rooms[i] = room;
+            break;
+        }
+
+        room = sv_data->rooms[i];
+        if (!room) {
+            sprintf(id, "%d", i);
+            room = make_server_logic(&fool_preset, id);
+            sv_data->rooms[i] = room;
+            break;
+        }
+    }
+
+    sess_l->interf->next_room = room;
+}
+
+static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *sv_data, const char *room_name)
+{
+    for (int i = 0; i < sv_data->rooms_size; i++) {
+        server_logic_t *room = sv_data->rooms[i];
+        if (room && streq(room_name, room->name) && server_logic_is_available(room)) {
+            sess_l->interf->next_room = room;
+            return;
+        }
+    }
+
+    OUTBUF_POST(sess_l, "Couldn't access the chosen room! Sumimasen\r\nYou: ");
 }

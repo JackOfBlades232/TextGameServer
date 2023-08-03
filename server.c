@@ -14,7 +14,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement hub logic: passwd, nicknames and room names, chat and spec char commands (create, join <name>)
 // @TODO: one should be able to exit from game to hub, both voluntarily and if logic kicks.
 //      @IDEA: thus, the rooms created in the hub have to hold a ref to it. We could do this by having make/init take a void * payload
 // @TODO: implement fool modifications: nickname display, in-game chat module (with switch in-logic)
