@@ -9,16 +9,15 @@
 
 #define INIT_SESS_REFS_ARR_SIZE 16
 #define INIT_ROOMS_ARR_SIZE     4
+#define MAX_ROOMS_ARR_SIZE      16*INIT_ROOMS_ARR_SIZE
 
 #define CREDENTIAL_MAX_LEN      64
 
 // @TODO: generalize file path specification?
 static const char passwd_path[] = "./passwd.txt";
 
-// @TODO: should i lock logged in users?
-// @TODO: add backspace redrawing to chat of your unfinished message
-
-// @HUH: add temp room deletion and array shrinkage (or, alternatively, limit for rooms)
+// @TODO: fix chat graphics
+// @TODO: restrict only one session per username
 
 // @TODO: refac
 
@@ -60,13 +59,8 @@ void hub_init_server_logic(server_logic_t *serv_l)
     sv_data->rooms_size = INIT_ROOMS_ARR_SIZE;
     sv_data->rooms = calloc(sv_data->rooms_size, sizeof(*sv_data->rooms));
 
-    // @TEST
-    for (int i = 0; i < sv_data->rooms_size; i++) {
-        char id[16];
-        sprintf(id, "%d", i);
-        sv_data->rooms[i] = make_server_logic(&fool_preset, id);
-        ASSERT(sv_data->rooms[i]);
-    }
+    for (int i = 0; i < sv_data->rooms_size; i++)
+        sv_data->rooms[i] = NULL;
 }
 
 void hub_deinit_server_logic(server_logic_t *serv_l)
@@ -139,7 +133,7 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l);
 static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_data);
 static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *sv_data, const char *room_name);
 
-// @TODO: refac
+// @TODO: refac?
 void hub_process_line(session_logic_t *sess_l, const char *line)
 {
     hub_session_data_t *s_data = sess_l->data;
@@ -301,11 +295,16 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)
 
 static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_data)
 {
-    server_logic_t *room;
+    server_logic_t *room = NULL;
     for (int i = 0; i <= sv_data->rooms_size; i++) {
         char id[16];
 
         if (i == sv_data->rooms_size) {
+            if (i >= MAX_ROOMS_ARR_SIZE) {
+                OUTBUF_POST(sess_l, "Max number of rooms is reached, wait for someone to finish playing\r\nYou: ");
+                return;
+            }
+
             int newsize = sv_data->rooms_size + INIT_ROOMS_ARR_SIZE;
             sv_data->rooms = 
                 realloc(sv_data->rooms, newsize * sizeof(*sv_data->rooms));
@@ -318,14 +317,15 @@ static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_
             room = make_server_logic(&fool_preset, id);
             sv_data->rooms[i] = room;
             break;
-        }
-
-        room = sv_data->rooms[i];
-        if (!room) {
+        } else if (!sv_data->rooms[i]) {
             sprintf(id, "%d", i);
             room = make_server_logic(&fool_preset, id);
             sv_data->rooms[i] = room;
             break;
+        } else if (sv_data->rooms[i]->sess_cnt <= 0) {
+            // Clean up empty rooms
+            destroy_server_logic(sv_data->rooms[i]);
+            sv_data->rooms[i] = NULL;
         }
     }
 
