@@ -16,8 +16,10 @@
 // @TODO: generalize file path specification?
 static const char passwd_path[] = "./passwd.txt";
 
-// @TODO: fix chat graphics
 // @TODO: restrict only one session per username
+//  @IDEA: since there is only one place where all the sessions live -- server,
+//  we need to make an interf flag "check username", and then roll back the user state if
+//  he already exists
 
 // @TODO: refac
 
@@ -158,7 +160,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
             {
                 if (streq(s_data->expected_password, line)) {
                     // @TODO: add more helpful greeting
-                    OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\nYou: ", clrscr);
+                    OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\n", clrscr);
                     s_data->state = hs_global_chat;
                 } else {
                     s_data->state = hs_input_username;
@@ -171,7 +173,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
         case hs_create_user:
             {
                 if (add_user(sv_data, sess_l->username, line)) {
-                    OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\nYou: ", clrscr);
+                    OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\n", clrscr);
                     s_data->state = hs_global_chat;
                 } else {
                     s_data->state = hs_input_username;
@@ -181,18 +183,14 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
 
         case hs_global_chat:
             {
-                if (strlen(line) == 0)
-                    OUTBUF_POST(sess_l, "You: ");
-                else if (streq(line, "list"))
+                if (streq(line, "list"))
                     send_rooms_list(sess_l, serv_l); 
                 else if (streq(line, "create"))
                     create_and_join_room(sess_l, sv_data);
                 else if (strncmp(line, "join ", 5) == 0)
                     try_join_existing_room(sess_l, sv_data, line+5);
-                else {
+                else
                     forward_message_to_all_users(serv_l, sess_l, line);
-                    OUTBUF_POST(sess_l, "You: ");
-                }
             } break;
     }
 
@@ -269,7 +267,7 @@ static void forward_message_to_all_users(server_logic_t *serv_l, session_logic_t
     for (int i = 0; i < serv_l->sess_cnt; i++) {
         session_logic_t *other_sess_l = serv_l->sess_refs[i];
         if (other_sess_l != sess_l)
-            OUTBUF_POSTF(other_sess_l, "\r\n%s: %s\r\nYou: ", sess_l->username, msg);
+            OUTBUF_POSTF(other_sess_l, "%s: %s\r\n", sess_l->username, msg);
     }
 }
 
@@ -285,7 +283,7 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)
                     room->sess_cnt, room->sess_cap,
                     server_logic_is_available(room) ? "" : "(closed)");
     }
-    sb_add_str(sb, "\r\nYou: ");
+    sb_add_str(sb, "\r\n");
 
     char *full_str = sb_build_string(sb);
     OUTBUF_POST(sess_l, full_str);
@@ -301,7 +299,7 @@ static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_
 
         if (i == sv_data->rooms_size) {
             if (i >= MAX_ROOMS_ARR_SIZE) {
-                OUTBUF_POST(sess_l, "Max number of rooms is reached, wait for someone to finish playing\r\nYou: ");
+                OUTBUF_POST(sess_l, "Max number of rooms is reached, wait for someone to finish playing\r\n");
                 return;
             }
 
@@ -342,5 +340,5 @@ static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *s
         }
     }
 
-    OUTBUF_POST(sess_l, "Couldn't access the chosen room! Sumimasen\r\nYou: ");
+    OUTBUF_POST(sess_l, "Couldn't access the chosen room! Sumimasen\r\n");
 }

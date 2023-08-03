@@ -19,6 +19,7 @@
 // @TODO: implement fool modifications: nickname display, in-game chat module (with switch in-logic)
 // @TODO: think about statistics storage (how game-specific should they be?)
 
+// @TODO: fix the multiple static inlusions warnings (create module?)
 
 // @TODO: implement variation with threads (one thread deals with a subset of containers)
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)

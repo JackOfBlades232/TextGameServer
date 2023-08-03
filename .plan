@@ -8,7 +8,7 @@
     - Create in-game modifications
     - Create statistic remembrance (games played, games won)
 
-- Test thoroughly
+- Test thoroughly and check for mem leaks
 
 = Implement another text game & make server multi-game =
     - Create a riddles game
