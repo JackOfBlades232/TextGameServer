@@ -1,6 +1,7 @@
 /* TextGameServer/server.c */
 #include "defs.h"
 #include "logic.h"
+#include "module_functables.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,8 +14,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-#include "module_functables.h"
-
 // @TODO: implement serv_logic_t array and distribution on connect (connect player to non-full server if possible)
 // @TODO: implement separate hub container
 
@@ -24,9 +23,10 @@
 
 // @TODO: rename server logic and session logic to better names (and serv_l and sess_l accordingly)
 
-#define LISTEN_QLEN 16
-#define INIT_SESS_ARR_SIZE 32
-#define INBUFSIZE 1024
+#define LISTEN_QLEN          16
+#define INIT_SESS_ARR_SIZE   32
+#define INIT_ROOMS_ARR_SIZE  1
+#define INBUFSIZE            1024
 
 typedef struct session_tag {
     int fd;
@@ -42,12 +42,13 @@ typedef struct server_tag {
     session **sessions;
     int sessions_size;
 
-    server_logic_t *logic;
+    server_logic_t **rooms;
+    int rooms_size;
 } server;
 
-session *make_session(int fd, server *serv)
+session *make_session(int fd, server_logic_t *room)
 {
-    session *sess = malloc(sizeof(session));
+    session *sess = malloc(sizeof(*sess));
     sess->fd = fd;
     sess->buf_used = 0;
 
@@ -55,7 +56,7 @@ session *make_session(int fd, server *serv)
     sess->l_interf.out_buf_len = 0;
     sess->l_interf.quit = false;
 
-    sess->logic = make_session_logic(serv->logic, &sess->l_interf);
+    sess->logic = make_session_logic(room, &sess->l_interf);
     return sess;
 }
 
@@ -153,13 +154,17 @@ void server_init(server *serv, int port)
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
     // @TEST
-    serv->logic = make_server_logic(&fool_functable);
-    ASSERT(serv->logic);
+    serv->rooms = calloc(INIT_ROOMS_ARR_SIZE, sizeof(*serv->rooms));
+    serv->rooms_size = INIT_ROOMS_ARR_SIZE;
+    for (int i = 0; i < serv->rooms_size; i++) {
+        serv->rooms[i] = make_server_logic(&fool_functable);
+        ASSERT(serv->rooms[i]);
+    }
 }
 
 void server_accept_client(server *serv)
 {
-    int sd, i;
+    int sd;
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     sd = accept(serv->ls, (struct sockaddr *) &addr, &len);
@@ -174,12 +179,40 @@ void server_accept_client(server *serv)
             newsize += INIT_SESS_ARR_SIZE;
         serv->sessions = 
             realloc(serv->sessions, newsize * sizeof(*serv->sessions));
-        for (i = serv->sessions_size; i < newsize; i++)
+        for (int i = serv->sessions_size; i < newsize; i++)
             serv->sessions[i] = NULL;
         serv->sessions_size = newsize;
     }
 
-    serv->sessions[sd] = make_session(sd, serv);
+    // @TEST
+    // @TODO: factor resize and stuff out?
+    server_logic_t *room;
+    for (int i = 0; i <= serv->rooms_size; i++) {
+        if (i == serv->rooms_size) {
+            int newsize = serv->rooms_size + INIT_ROOMS_ARR_SIZE;
+            serv->rooms = 
+                realloc(serv->rooms, newsize * sizeof(*serv->rooms));
+            for (int j = serv->rooms_size; j < newsize; j++)
+                serv->rooms[j] = NULL;
+            serv->rooms_size = newsize;
+
+            printf("Reallocated to %d\n", serv->rooms_size);
+
+            room = make_server_logic(&fool_functable);
+            serv->rooms[i] = room;
+            break;
+        }
+
+        room = serv->rooms[i];
+        if (!room) {
+            room = make_server_logic(&fool_functable);
+            serv->rooms[i] = room;
+            break;
+        } else if (server_logic_is_available(room))
+            break;
+    }
+
+    serv->sessions[sd] = make_session(sd, room);
     ASSERT(serv->sessions[sd]);
 }
 
@@ -251,6 +284,6 @@ int main(int argc, char **argv)
         }
     }
 
-    destroy_server_logic(serv.logic);
+    // Let the OS deinit stuff
     return 0;
 }

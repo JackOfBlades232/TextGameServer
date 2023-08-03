@@ -5,8 +5,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// @HUH I don't like all the mingling of session_logic_t and fool-level data
-// @IDEA make a mandatory ref list to all sessions, and set a global max_player? Not liking it
+// @BUG: after disconnections in waiting state the logic breaks
 
 typedef struct fool_session_data_tag {
     player_state_t state;
@@ -148,6 +147,12 @@ void fool_process_line(session_logic_t *sess_l, const char *line)
         process_defender_in_free_for_all(sess_l, serv_l, line);
     else if (sv_data->state == gs_free_for_all && s_data->state == ps_attacking)
         process_attacker_in_free_for_all(sess_l, serv_l, line);
+}
+
+bool fool_server_is_available(server_logic_t *serv_l)
+{
+    fool_server_data_t *sv_data = serv_l->data;
+    return serv_l->sess_cnt < serv_l->sess_cap && sv_data->state == gs_awaiting_players;
 }
 
 static void end_game_with_message(server_logic_t *serv_l, const char *msg)

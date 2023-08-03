@@ -9,9 +9,9 @@ typedef struct session_logic_tag session_logic_t;
 
 typedef struct server_logic_tag {
     logic_state_functable_t *functable;
+
     session_logic_t **sess_refs;
     int sess_cnt, sess_cap;
-    
     void *data;
 } server_logic_t;
 
@@ -27,6 +27,7 @@ typedef void (*deinit_serv_func_t)(server_logic_t *);
 typedef void (*init_sess_func_t)(session_logic_t *);
 typedef void (*deinit_sess_func_t)(session_logic_t *);
 typedef void (*state_process_line_func_t)(session_logic_t *, const char *);
+typedef bool (*serv_is_available_func_t)(server_logic_t *);
 
 struct logic_state_functable_tag {
     init_serv_func_t           init_serv_f;
@@ -34,6 +35,7 @@ struct logic_state_functable_tag {
     init_sess_func_t           init_sess_f;
     deinit_sess_func_t         deinit_sess_f;
     state_process_line_func_t  process_line_f;
+    serv_is_available_func_t   serv_is_available_f;
 };
 
 struct session_logic_tag {
@@ -52,6 +54,11 @@ void session_logic_process_line(session_logic_t *sess_s, const char *line);
 
 // Not passing the line in, just process the event (like send smth and quit)
 void session_logic_process_too_long_line(session_logic_t *sess_l);
+
+static inline bool server_logic_is_available(server_logic_t *serv_l)
+{
+    return (*serv_l->functable->serv_is_available_f)(serv_l);
+}
 
 // Universal utility macros for posting responses
 #define OUTBUF_POST(_sess_l, _str) do { \
