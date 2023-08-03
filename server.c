@@ -60,7 +60,7 @@ session *make_session(int fd, server_logic_t *room)
     sess->l_interf.next_room = NULL;
     sess->l_interf.quit = false;
 
-    sess->logic = make_session_logic(room, &sess->l_interf);
+    sess->logic = make_session_logic(room, &sess->l_interf, NULL);
     return sess;
 }
 
@@ -138,8 +138,9 @@ void session_switch_room(session *sess)
 {
     ASSERT(sess->l_interf.next_room);
 
+    char *username = strdup(sess->logic->username);
     destroy_session_logic(sess->logic);
-    sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf);
+    sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf, username);
     sess->l_interf.next_room = NULL;
 }
 

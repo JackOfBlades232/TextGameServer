@@ -49,13 +49,16 @@ struct session_logic_tag {
     server_logic_t *serv;
     session_interface_t *interf;
 
+    char *username;
+
     void *data;
 };
 
 server_logic_t *make_server_logic(logic_preset_t *preset, const char *id);
 void destroy_server_logic(server_logic_t *serv_l);
-session_logic_t *make_session_logic(server_logic_t *serv_s,
-                                    session_interface_t *interf);
+session_logic_t *make_session_logic(server_logic_t *serv_l,
+                                    session_interface_t *interf,
+                                    char *username);
 void destroy_session_logic(session_logic_t *sess_s);
 void session_logic_process_line(session_logic_t *sess_s, const char *line);
 

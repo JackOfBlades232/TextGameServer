@@ -5,6 +5,7 @@
 #include "defs.h"
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef struct list_node_tag {
     void *data;
@@ -34,7 +35,13 @@ size_t sb_add_str(string_builder_t *sb, const char *str);
 size_t sb_add_strf(string_builder_t *sb, const char *fmt, ...);
 char *sb_build_string(string_builder_t *sb);
 
+static inline bool char_is_a_symbol(int c) { return c >= '!' && c <= '~'; }
+
+static inline bool streq(const char *s1, const char *s2) { return strcmp(s1, s2) == 0; }
+
 char *strcat_alloc(const char *s1, const char *s2);
+
+size_t fread_word_to_buf(FILE *f, char *buf, size_t bufsize, int *break_char);
 
 void inc_cycl(int *i, int len); 
 int next_cycl(int i, int len);

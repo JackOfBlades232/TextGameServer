@@ -27,7 +27,8 @@ void destroy_server_logic(server_logic_t *serv_l)
 }
 
 session_logic_t *make_session_logic(server_logic_t *serv_l,
-                                    session_interface_t *interf)
+                                    session_interface_t *interf,
+                                    char *username)
 {
     ASSERT(serv_l);
     ASSERT(interf);
@@ -35,6 +36,7 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
     session_logic_t *sess_l = malloc(sizeof(*sess_l));
     sess_l->serv = serv_l;
     sess_l->interf = interf;
+    sess_l->username = username;
     (*serv_l->preset->init_sess_f)(sess_l);
 
     return sess_l;
@@ -43,6 +45,7 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
 void destroy_session_logic(session_logic_t *sess_l)
 {
     ASSERT(sess_l);
+    if (sess_l->username) free(sess_l->username);
     (*sess_l->serv->preset->deinit_sess_f)(sess_l);
     free(sess_l);
 }

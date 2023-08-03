@@ -178,6 +178,26 @@ char *strcat_alloc(const char *s1, const char *s2)
     return res;
 }
 
+size_t fread_word_to_buf(FILE *f, char *buf, size_t bufsize, int *break_char)
+{
+    int c;
+    size_t chars_put = 0;
+
+    ASSERT(bufsize > 0);
+
+    while (char_is_a_symbol(c = fgetc(f))) {
+        if (chars_put >= bufsize-1)
+            break;
+
+        *(buf++) = c;
+        chars_put++;
+    }
+
+    *buf = '\0';
+    *break_char = c;
+    return chars_put;
+}
+
 void inc_cycl(int *i, int len) 
 { 
     if (++(*i) >= len) 
