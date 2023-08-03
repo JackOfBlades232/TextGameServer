@@ -14,9 +14,9 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement separate hub container and ability to switch containers (= recreate logic)
-//      @IDEA: we need to add a flag to the interface of type "change room", so as not to hack this into logic
 // @TODO: implement hub logic: passwd, nicknames and room names, chat and spec char commands (create, join <name>)
+// @TODO: one should be able to exit from game to hub, both voluntarily and if logic kicks.
+//      @IDEA: thus, the rooms created in the hub have to hold a ref to it. We could do this by having make/init take a void * payload
 // @TODO: implement fool modifications: nickname display, in-game chat module (with switch in-logic)
 // @TODO: think about statistics storage (how game-specific should they be?)
 
@@ -25,7 +25,7 @@
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
 // @TODO: implement normal quit on ^C
 
-// @TODO: rename server logic and session logic to better names (and serv_l and sess_l accordingly)
+// @TODO: really do something about the naming (the logics, rooms and shit are confusing)
 
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32
@@ -57,6 +57,7 @@ session *make_session(int fd, server_logic_t *room)
 
     sess->l_interf.out_buf = NULL;
     sess->l_interf.out_buf_len = 0;
+    sess->l_interf.next_room = NULL;
     sess->l_interf.quit = false;
 
     sess->logic = make_session_logic(room, &sess->l_interf);
@@ -96,8 +97,8 @@ void session_check_lf(session *sess)
 
 bool session_do_read(session *sess)
 {
-    // If waiting to send data or marked for quit, skip turn
-    if (sess->l_interf.out_buf || sess->l_interf.quit)
+    // If waiting to send data or marked for change room/quit, skip turn
+    if (sess->l_interf.out_buf || sess->l_interf.next_room || sess->l_interf.quit)
         return true;
 
     int rc, bufp = sess->buf_used;
@@ -131,6 +132,15 @@ bool session_do_write(session *sess)
         return false;
 
     return true;
+}
+
+void session_switch_room(session *sess)
+{
+    ASSERT(sess->l_interf.next_room);
+
+    destroy_session_logic(sess->logic);
+    sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf);
+    sess->l_interf.next_room = NULL;
 }
 
 void server_init(server *serv, int port)
@@ -250,6 +260,10 @@ int main(int argc, char **argv)
                 {
                     server_close_session(&serv, i);
                 }
+
+                // If sent all that was in the buffer and not quitting, and logic says "next room", do so
+                if (sess->l_interf.next_room && !sess->l_interf.quit && !sess->l_interf.out_buf) 
+                    session_switch_room(sess);
             }
         }
     }

@@ -143,8 +143,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
             break;
     }
 
-    // @TEST @TEST
-    puts(room->name);
+    sess_l->interf->next_room = room;
 }
 
 bool hub_server_is_available(server_logic_t *serv_l)

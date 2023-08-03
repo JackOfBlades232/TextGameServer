@@ -20,7 +20,7 @@ server_logic_t *make_server_logic(logic_preset_t *preset, const char *id)
 
 void destroy_server_logic(server_logic_t *serv_l)
 {
-    ASSERT(serv_l && serv_l->data);
+    ASSERT(serv_l);
     (*serv_l->preset->deinit_serv_f)(serv_l);
     if (serv_l->name) free(serv_l->name);
     free(serv_l);
@@ -42,7 +42,7 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
 
 void destroy_session_logic(session_logic_t *sess_l)
 {
-    ASSERT(sess_l && sess_l->data);
+    ASSERT(sess_l);
     (*sess_l->serv->preset->deinit_sess_f)(sess_l);
     free(sess_l);
 }

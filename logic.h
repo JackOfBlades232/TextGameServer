@@ -12,14 +12,17 @@ typedef struct server_logic_tag {
 
     char *name;
     session_logic_t **sess_refs;
-
     int sess_cnt, sess_cap;
+
     void *data;
 } server_logic_t;
 
 typedef struct session_interface_tag {
     char *out_buf;
     int out_buf_len;
+
+    server_logic_t *next_room;
+
     bool quit;
 } session_interface_t;
 

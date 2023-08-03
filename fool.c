@@ -71,6 +71,10 @@ void fool_init_session_logic(session_logic_t *sess_l)
         return;
     }
 
+    OUTBUF_POSTF(sess_l,
+            "%sWelcome to the game of FOOL! "
+            "Once there is one more player, you can press ENTER to start the game", 
+            clrscr);
     serv_l->sess_refs[serv_l->sess_cnt++] = sess_l;
 
     if (serv_l->sess_cnt == serv_l->sess_cap)
