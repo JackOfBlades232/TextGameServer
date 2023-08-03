@@ -1,7 +1,7 @@
 /* TextGameServer/server.c */
 #include "defs.h"
 #include "logic.h"
-#include "module_functables.h"
+#include "logic_presets.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,7 +14,12 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement separate hub container
+// @TODO: implement separate hub container and ability to switch containers (= recreate logic)
+//      @IDEA: we need to add a flag to the interface of type "change room", so as not to hack this into logic
+// @TODO: implement hub logic: passwd, nicknames and room names, chat and spec char commands (create, join <name>)
+// @TODO: implement fool modifications: nickname display, in-game chat module (with switch in-logic)
+// @TODO: think about statistics storage (how game-specific should they be?)
+
 
 // @TODO: implement variation with threads (one thread deals with a subset of containers)
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
@@ -156,7 +161,7 @@ void server_init(server *serv, int port)
     serv->rooms = calloc(INIT_ROOMS_ARR_SIZE, sizeof(*serv->rooms));
     serv->rooms_size = INIT_ROOMS_ARR_SIZE;
     for (int i = 0; i < serv->rooms_size; i++) {
-        serv->rooms[i] = make_server_logic(&fool_functable);
+        serv->rooms[i] = make_server_logic(&fool_preset);
         ASSERT(serv->rooms[i]);
     }
 }
@@ -195,14 +200,14 @@ void server_accept_client(server *serv)
                 serv->rooms[j] = NULL;
             serv->rooms_size = newsize;
 
-            room = make_server_logic(&fool_functable);
+            room = make_server_logic(&fool_preset);
             serv->rooms[i] = room;
             break;
         }
 
         room = serv->rooms[i];
         if (!room) {
-            room = make_server_logic(&fool_functable);
+            room = make_server_logic(&fool_preset);
             serv->rooms[i] = room;
             break;
         } else if (server_logic_is_available(room))

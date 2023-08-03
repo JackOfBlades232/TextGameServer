@@ -1,4 +1,5 @@
-/* TextGameServer/simple_fool.c */
+/* TextGameServer/fool.c */
+#include "fool.h"
 #include "logic.h"
 #include "utils.h"
 #include "fool_data_structures.c"

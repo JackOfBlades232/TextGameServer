@@ -4,11 +4,11 @@
 
 #include "defs.h"
 
-typedef struct logic_state_functable_tag logic_state_functable_t;
+typedef struct logic_preset_tag logic_preset_t;
 typedef struct session_logic_tag session_logic_t;
 
 typedef struct server_logic_tag {
-    logic_state_functable_t *functable;
+    logic_preset_t *preset;
 
     session_logic_t **sess_refs;
     int sess_cnt, sess_cap;
@@ -29,7 +29,9 @@ typedef void (*deinit_sess_func_t)(session_logic_t *);
 typedef void (*state_process_line_func_t)(session_logic_t *, const char *);
 typedef bool (*serv_is_available_func_t)(server_logic_t *);
 
-struct logic_state_functable_tag {
+struct logic_preset_tag {
+    const char *name;
+
     init_serv_func_t           init_serv_f;
     deinit_serv_func_t         deinit_serv_f;
     init_sess_func_t           init_sess_f;
@@ -45,7 +47,7 @@ struct session_logic_tag {
     void *data;
 };
 
-server_logic_t *make_server_logic(logic_state_functable_t *functable);
+server_logic_t *make_server_logic(logic_preset_t *preset);
 void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_s,
                                     session_interface_t *interf);
@@ -57,7 +59,7 @@ void session_logic_process_too_long_line(session_logic_t *sess_l);
 
 static inline bool server_logic_is_available(server_logic_t *serv_l)
 {
-    return (*serv_l->functable->serv_is_available_f)(serv_l);
+    return (*serv_l->preset->serv_is_available_f)(serv_l);
 }
 
 // Universal utility macros for posting responses

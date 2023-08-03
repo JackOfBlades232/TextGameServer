@@ -2,6 +2,9 @@
 #ifndef FOOL_SENTRY
 #define FOOL_SENTRY
 
+#include "defs.h"
+#include "logic.h"
+
 void fool_init_server_logic(server_logic_t *serv_l);
 void fool_deinit_server_logic(server_logic_t *serv_l);
 void fool_init_session_logic(session_logic_t *sess_l);
