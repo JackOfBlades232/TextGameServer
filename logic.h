@@ -5,9 +5,12 @@
 #include "defs.h"
 
 typedef struct logic_state_functable_tag logic_state_functable_t;
+typedef struct session_logic_tag session_logic_t;
 
 typedef struct server_logic_tag {
     logic_state_functable_t *functable;
+    session_logic_t **sess_refs;
+    int sess_cnt, sess_cap;
     
     void *data;
 } server_logic_t;
@@ -17,13 +20,6 @@ typedef struct session_interface_tag {
     int out_buf_len;
     bool quit;
 } session_interface_t;
-
-typedef struct session_logic_tag {
-    server_logic_t *serv;
-    session_interface_t *interf;
-
-    void *data;
-} session_logic_t;
 
 // Functions for working with session/server data & interface in different logic modules
 typedef void (*init_serv_func_t)(server_logic_t *);
@@ -38,6 +34,13 @@ struct logic_state_functable_tag {
     init_sess_func_t           init_sess_f;
     deinit_sess_func_t         deinit_sess_f;
     state_process_line_func_t  process_line_f;
+};
+
+struct session_logic_tag {
+    server_logic_t *serv;
+    session_interface_t *interf;
+
+    void *data;
 };
 
 server_logic_t *make_server_logic(logic_state_functable_t *functable);

@@ -15,14 +15,14 @@
 
 #include "module_functables.h"
 
-// @TODO: reimplement server
-
 // @TODO: implement serv_logic_t array and distribution on connect (connect player to non-full server if possible)
 // @TODO: implement separate hub container
 
 // @TODO: implement variation with threads (one thread deals with a subset of containers)
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
 // @TODO: implement normal quit on ^C
+
+// @TODO: rename server logic and session logic to better names (and serv_l and sess_l accordingly)
 
 #define LISTEN_QLEN 16
 #define INIT_SESS_ARR_SIZE 32
