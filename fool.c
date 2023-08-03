@@ -36,7 +36,6 @@ static void reset_server_logic(server_logic_t *serv_l);
 void fool_init_server_logic(server_logic_t *serv_l)
 {
     serv_l->sess_cap = MAX_PLAYERS_PER_GAME;
-    serv_l->sess_cnt = 0;
     serv_l->sess_refs = malloc(serv_l->sess_cap * sizeof(*serv_l->sess_refs));
     serv_l->data = malloc(sizeof(fool_server_data_t));
     reset_server_logic(serv_l);
@@ -88,21 +87,24 @@ void fool_deinit_session_logic(session_logic_t *sess_l)
     server_logic_t *serv_l = sess_l->serv;
     fool_server_data_t *sv_data = serv_l->data;
 
-    // Remove from player array and shift others
-    bool offset = false;
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        if (serv_l->sess_refs[i] == sess_l) {
-            serv_l->sess_cnt--;
-            offset = true;
+    // If not reset, remove from player array and shift others
+    if (serv_l->sess_cnt > 0) {
+        bool offset = false;
+        for (int i = 0; i < serv_l->sess_cnt; i++) {
+            if (serv_l->sess_refs[i] == sess_l) {
+                offset = true;
 
-            if (sv_data->defender_index >= i)
-                sv_data->defender_index--;
-            if (sv_data->attacker_index >= i)
-                sv_data->attacker_index--;
-        } else if (offset) {
-            serv_l->sess_refs[i-1] = serv_l->sess_refs[i];
-            serv_l->sess_refs[i] = NULL;
+                if (sv_data->defender_index > i)
+                    sv_data->defender_index--;
+                if (sv_data->attacker_index > i)
+                    sv_data->attacker_index--;
+            } else if (offset) {
+                serv_l->sess_refs[i-1] = serv_l->sess_refs[i];
+                serv_l->sess_refs[i] = NULL;
+            }
         }
+        if (offset) 
+            serv_l->sess_cnt--;
     }
 
     // If a live player has disconnected, end the game
@@ -159,6 +161,9 @@ static void end_game_with_message(server_logic_t *serv_l, const char *msg)
 {
     // @TODO: add some possible delay before disconnecting all players
     //      (may just sleep the thread lol)
+    // @HACK: the sess_cnt gets reset to 0 before the disconnections happen,
+    //      so i had to hack this in deinit_session_logic. There might be a
+    //      better solution
     for (int i = 0; i < serv_l->sess_cnt; i++) {
         session_logic_t *sess_l = serv_l->sess_refs[i]; 
         if (sess_l) {
