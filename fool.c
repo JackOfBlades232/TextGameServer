@@ -28,9 +28,6 @@ typedef struct fool_server_data_tag {
 
 // View
 #define CHARS_TO_TRUMP 70
-static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
 
 static void reset_server_logic(server_logic_t *serv_l);
 

@@ -167,6 +167,17 @@ char *sb_build_string(string_builder_t *sb)
     return str;
 }
 
+char *strcat_alloc(const char *s1, const char *s2)
+{
+    size_t l1 = strlen(s1);
+    size_t l2 = strlen(s2);
+    char *res = malloc((l1+l2+1) * sizeof(*res));
+    memcpy(res, s1, l1);
+    memcpy(res+l1, s2, l2);
+    res[l1+l2] = '\0';
+    return res;
+}
+
 void inc_cycl(int *i, int len) 
 { 
     if (++(*i) >= len) 

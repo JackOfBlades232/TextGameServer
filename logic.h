@@ -10,7 +10,9 @@ typedef struct session_logic_tag session_logic_t;
 typedef struct server_logic_tag {
     logic_preset_t *preset;
 
+    char *name;
     session_logic_t **sess_refs;
+
     int sess_cnt, sess_cap;
     void *data;
 } server_logic_t;
@@ -47,7 +49,7 @@ struct session_logic_tag {
     void *data;
 };
 
-server_logic_t *make_server_logic(logic_preset_t *preset);
+server_logic_t *make_server_logic(logic_preset_t *preset, const char *id);
 void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_s,
                                     session_interface_t *interf);
@@ -62,7 +64,7 @@ static inline bool server_logic_is_available(server_logic_t *serv_l)
     return (*serv_l->preset->serv_is_available_f)(serv_l);
 }
 
-// Universal utility macros for posting responses
+// Universal utility thigys for posting responses
 #define OUTBUF_POST(_sess_l, _str) do { \
     if (_sess_l->interf->out_buf) free(_sess_l->interf->out_buf); \
     _sess_l->interf->out_buf = strdup(_str); \
@@ -75,5 +77,10 @@ static inline bool server_logic_is_available(server_logic_t *serv_l)
     _sess_l->interf->out_buf = malloc(req_size * sizeof(*_sess_l->interf->out_buf)); \
     _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
 } while (0)
+
+static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
 
 #endif

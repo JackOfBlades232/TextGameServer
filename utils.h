@@ -34,6 +34,8 @@ size_t sb_add_str(string_builder_t *sb, const char *str);
 size_t sb_add_strf(string_builder_t *sb, const char *fmt, ...);
 char *sb_build_string(string_builder_t *sb);
 
+char *strcat_alloc(const char *s1, const char *s2);
+
 void inc_cycl(int *i, int len); 
 int next_cycl(int i, int len);
 void dec_cycl(int *i, int len); 

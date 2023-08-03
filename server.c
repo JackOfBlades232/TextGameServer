@@ -46,8 +46,7 @@ typedef struct server_tag {
     session **sessions;
     int sessions_size;
 
-    server_logic_t **rooms;
-    int rooms_size;
+    server_logic_t *hub;
 } server;
 
 session *make_session(int fd, server_logic_t *room)
@@ -157,13 +156,8 @@ void server_init(server *serv, int port)
     serv->sessions = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->sessions));
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
-    // @TEST
-    serv->rooms = calloc(INIT_ROOMS_ARR_SIZE, sizeof(*serv->rooms));
-    serv->rooms_size = INIT_ROOMS_ARR_SIZE;
-    for (int i = 0; i < serv->rooms_size; i++) {
-        serv->rooms[i] = make_server_logic(&fool_preset);
-        ASSERT(serv->rooms[i]);
-    }
+    serv->hub = make_server_logic(&hub_preset, NULL);
+    ASSERT(serv->hub);
 }
 
 void server_accept_client(server *serv)
@@ -188,33 +182,7 @@ void server_accept_client(server *serv)
         serv->sessions_size = newsize;
     }
 
-    // @TEST
-    // @TODO: factor resize and stuff out?
-    server_logic_t *room;
-    for (int i = 0; i <= serv->rooms_size; i++) {
-        if (i == serv->rooms_size) {
-            int newsize = serv->rooms_size + INIT_ROOMS_ARR_SIZE;
-            serv->rooms = 
-                realloc(serv->rooms, newsize * sizeof(*serv->rooms));
-            for (int j = serv->rooms_size; j < newsize; j++)
-                serv->rooms[j] = NULL;
-            serv->rooms_size = newsize;
-
-            room = make_server_logic(&fool_preset);
-            serv->rooms[i] = room;
-            break;
-        }
-
-        room = serv->rooms[i];
-        if (!room) {
-            room = make_server_logic(&fool_preset);
-            serv->rooms[i] = room;
-            break;
-        } else if (server_logic_is_available(room))
-            break;
-    }
-
-    serv->sessions[sd] = make_session(sd, room);
+    serv->sessions[sd] = make_session(sd, serv->hub);
     ASSERT(serv->sessions[sd]);
 }
 
