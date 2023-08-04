@@ -1,6 +1,7 @@
 /* TextGameServer/hub.c */
 #include "hub.h"
 #include "logic.h"
+#include "chat_funcs.h"
 #include "utils.h"
 #include "logic_presets.h"
 #include <stdio.h>
@@ -49,12 +50,6 @@ void hub_init_server_logic(server_logic_t *serv_l, void *payload)
     serv_l->data = malloc(sizeof(hub_server_data_t));
     hub_server_data_t *sv_data = serv_l->data;
 
-    // @TODO: check passwd file correctness, including max word sizes
-    sv_data->passwd_f = fopen(passwd_path, "r+");
-    ASSERT(sv_data->passwd_f);
-    // @TODO: read stats file
-    sv_data->stats_f = NULL;
-
     sv_data->rooms_size = INIT_ROOMS_ARR_SIZE;
     sv_data->rooms = calloc(sv_data->rooms_size, sizeof(*sv_data->rooms));
 
@@ -62,6 +57,12 @@ void hub_init_server_logic(server_logic_t *serv_l, void *payload)
         sv_data->rooms[i] = NULL;
 
     sv_data->logged_in_usernames_ref = payload;
+
+    // @TODO: check passwd file correctness, including max word sizes
+    sv_data->passwd_f = fopen(passwd_path, "r+");
+    ASSERT(sv_data->passwd_f);
+    // @TODO: read stats file
+    sv_data->stats_f = NULL;
 }
 
 void hub_deinit_server_logic(server_logic_t *serv_l)
@@ -81,18 +82,21 @@ void hub_init_session_logic(session_logic_t *sess_l)
 {
     sess_l->data = malloc(sizeof(hub_session_data_t));
 
+    server_logic_t *serv_l = sess_l->serv;
     hub_session_data_t *s_data = sess_l->data;
 
     // Check if this is first switch to hub. if not, straight to glob chat. Otherwise, login
-    if (sess_l->username)
+    if (sess_l->username) {
+        sess_l->is_in_chat = true;
+        chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n");
+
         s_data->state = hs_global_chat;
-    else {
+    } else {
         s_data->state = hs_input_username;
         s_data->expected_password = NULL;
         OUTBUF_POSTF(sess_l, "%sWelcome to the TextGameServer! Input your username: ", clrscr);
     }
 
-    server_logic_t *serv_l = sess_l->serv;
     if (serv_l->sess_cnt >= serv_l->sess_cap) {
         int new_cap = serv_l->sess_cap;
         while (serv_l->sess_cnt >= new_cap)
@@ -130,7 +134,6 @@ static bool user_already_logged_in(hub_server_data_t *sv_data, const char *usern
 static char *lookup_username_and_get_password(hub_server_data_t *sv_data, const char *usernm);
 static bool add_user(hub_server_data_t *sv_data, const char *usernm, const char *passwd);
 
-static void forward_message_to_all_users(server_logic_t *serv_l, session_logic_t *sess_l, const char *msg);
 static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l);
 static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l);
 static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *sv_data, const char *room_name);
@@ -169,7 +172,9 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                 }
                 if (streq(s_data->expected_password, line)) {
                     // @TODO: add more helpful greeting
-                    OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\n", clrscr);
+                    sess_l->is_in_chat = true;
+                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n");
+
                     s_data->state = hs_global_chat;
                     sess_l->interf->need_to_register_username = true;
                 } else {
@@ -188,7 +193,10 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     break;
                 }
                 if (add_user(sv_data, sess_l->username, line)) {
-                    OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\n", clrscr);
+                    // @TODO: factor out
+                    sess_l->is_in_chat = true;
+                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n");
+
                     s_data->state = hs_global_chat;
                     sess_l->interf->need_to_register_username = true;
                 } else {
@@ -199,14 +207,18 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
 
         case hs_global_chat:
             {
+                ASSERT(sess_l->is_in_chat);
                 if (streq(line, "list"))
                     send_rooms_list(sess_l, serv_l); 
                 else if (streq(line, "create"))
                     create_and_join_room(sess_l, serv_l);
                 else if (strncmp(line, "join ", 5) == 0)
                     try_join_existing_room(sess_l, sv_data, line+5);
-                else if (strlen(line) > 0)
-                    forward_message_to_all_users(serv_l, sess_l, line);
+                else if (strlen(line) > 0) {
+                    // @TODO: refac
+                    if (!chat_try_post_message(serv_l->chat, serv_l, sess_l, line))
+                        OUTBUF_POST(sess_l, "The message is too long!\r\n");
+                }
             } break;
     }
 
@@ -286,16 +298,6 @@ static bool add_user(hub_server_data_t *sv_data, const char *usernm, const char 
         return true;
     } else
         return false;
-}
-
-static void forward_message_to_all_users(server_logic_t *serv_l, session_logic_t *sess_l, const char *msg)
-{
-    ASSERT(sess_l->username);
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        session_logic_t *other_sess_l = serv_l->sess_refs[i];
-        if (other_sess_l != sess_l)
-            OUTBUF_POSTF(other_sess_l, "%s: %s\r\n", sess_l->username, msg);
-    }
 }
 
 static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)

@@ -3,6 +3,7 @@
 #define LOGIC_SENTRY
 
 #include "defs.h"
+#include "chat.h"
 
 typedef struct logic_preset_tag logic_preset_t;
 typedef struct session_logic_tag session_logic_t;
@@ -13,6 +14,8 @@ typedef struct server_logic_tag {
     char *name;
     session_logic_t **sess_refs;
     int sess_cnt, sess_cap;
+
+    chat_t *chat;
 
     void *data;
 } server_logic_t;

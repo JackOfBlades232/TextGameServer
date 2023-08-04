@@ -1,5 +1,6 @@
 /* TextGameServer/chat.c */
 #include "chat.h"
+#include "chat_funcs.h"
 #include "utils.h"
 #include <string.h>
 
@@ -34,7 +35,10 @@ void destroy_chat(chat_t *c)
 bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
                            session_logic_t *author_sl, const char *msg)
 {
-    //ASSERT(msg);
+    // @TODO: deal with this case correctly
+    if (!author_sl->is_in_chat)
+        return true;
+
     if (strlen(msg) > MAX_CHAT_MSG_LEN)
         return false;
 
@@ -48,7 +52,7 @@ bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
     for (int i = 0; i < serv_l->sess_cnt; i++) {
         session_logic_t *sess_l = serv_l->sess_refs[i];
         if (sess_l->is_in_chat && sess_l != author_sl)
-            OUTBUF_POSTF(sess_l, "%s: %s\r\n", sess_l->username, msg);
+            OUTBUF_POSTF(sess_l, "%s: %s\r\n", author_sl->username, msg);
     }
 
     return true;
@@ -56,6 +60,10 @@ bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
 
 void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
 {
+    // @TODO: deal with this case correctly
+    if (!sess_l->is_in_chat)
+        return;
+
     string_builder_t *sb = sb_create();
     sb_add_str(sb, clrscr);
     if (header)
@@ -71,6 +79,8 @@ void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
             sb_add_strf(sb, "You: %s\r\n", msg->content);
         else
             sb_add_strf(sb, "%s: %s\r\n", msg->username, msg->content);
+
+        inc_cycl(&msg_idx, CHAT_MSG_HISTORY_SIZE);
     }
 
     char *full_str = sb_build_string(sb);

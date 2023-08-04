@@ -1,6 +1,7 @@
 /* TextGameServer/logic.c */
 #include "logic.h"
 #include "utils.h"
+#include "chat_funcs.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,6 +14,8 @@ server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, void *
     else
         serv_l->name = strdup(preset->name);
 
+    serv_l->chat = make_chat();
+
     (*preset->init_serv_f)(serv_l, payload);
 
     return serv_l;
@@ -22,6 +25,7 @@ void destroy_server_logic(server_logic_t *serv_l)
 {
     ASSERT(serv_l);
     (*serv_l->preset->deinit_serv_f)(serv_l);
+    destroy_chat(serv_l->chat);
     if (serv_l->name) free(serv_l->name);
     free(serv_l);
 }
