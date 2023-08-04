@@ -15,17 +15,21 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement fool modifications: in-game chat module (with switch in-logic)
 // @TODO: implement statistics storage (records of type "username game matches wins losses")
 
 // @TODO: factor username out to server framework level (since it is persistent data, this will also fix logic recreation)
 // @TODO: fix the multiple static inlusions warnings (create module?)
 
+// @TODO: create more helpful messages in hub and fool alike
+// @TODO: really do something about the naming (the logics, rooms and shit are confusing)
+
+// Phase 2
+// @TODO: riddles game
+// @TODO: games list & create choice in hub
+
 // @TODO: implement variation with threads (one thread deals with a subset of containers)
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
-// @TODO: implement normal quit on ^C
-
-// @TODO: really do something about the naming (the logics, rooms and shit are confusing)
+// @TODO: implement normal quit on ^C and daemonization
 
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32

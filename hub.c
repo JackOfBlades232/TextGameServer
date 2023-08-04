@@ -88,7 +88,7 @@ void hub_init_session_logic(session_logic_t *sess_l)
     // Check if this is first switch to hub. if not, straight to glob chat. Otherwise, login
     if (sess_l->username) {
         sess_l->is_in_chat = true;
-        chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n");
+        chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
 
         s_data->state = hs_global_chat;
     } else {
@@ -173,7 +173,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                 if (streq(s_data->expected_password, line)) {
                     // @TODO: add more helpful greeting
                     sess_l->is_in_chat = true;
-                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n");
+                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
 
                     s_data->state = hs_global_chat;
                     sess_l->interf->need_to_register_username = true;
@@ -195,7 +195,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                 if (add_user(sv_data, sess_l->username, line)) {
                     // @TODO: factor out
                     sess_l->is_in_chat = true;
-                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n");
+                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
 
                     s_data->state = hs_global_chat;
                     sess_l->interf->need_to_register_username = true;

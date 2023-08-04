@@ -1,6 +1,7 @@
 /* TextGameServer/fool.c */
 #include "fool.h"
 #include "logic.h"
+#include "chat_funcs.h"
 #include "utils.h"
 #include "fool_data_structures.c"
 #include <stdlib.h>
@@ -69,14 +70,10 @@ void fool_init_session_logic(session_logic_t *sess_l)
         OUTBUF_POSTF(sess_l, "The server is full (%d/%d)!\r\n",
                      serv_l->sess_cap, serv_l->sess_cap);
         
-        // @TEST
-        //sess_l->interf->quit = true;
         sess_l->interf->next_room = sv_data->hub_ref;
         return;
     } else if (sv_data->state != gs_awaiting_players) {
         OUTBUF_POST(sess_l, "The game has already started! Try again later\r\n");
-        // @TEST
-        //sess_l->interf->quit = true;
         sess_l->interf->next_room = sv_data->hub_ref;
         return;
     }
@@ -135,6 +132,9 @@ void fool_deinit_session_logic(session_logic_t *sess_l)
     sess_l->data = NULL;
 }
 
+static int get_player_index(session_logic_t *sess_l, server_logic_t *serv_l);
+static void send_updates_to_player(server_logic_t *serv_l, int i);
+
 static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
 static void process_defender_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
 static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
@@ -153,6 +153,22 @@ void fool_process_line(session_logic_t *sess_l, const char *line)
         return;
     } else if (sv_data->state == gs_game_end)
         return;
+
+    if (sess_l->is_in_chat) {
+        if (streq(line, "game")) {
+            sess_l->is_in_chat = false;
+            send_updates_to_player(serv_l, get_player_index(sess_l, serv_l));
+        } else if (strlen(line) > 0) {
+            // @TODO: refac
+            if (!chat_try_post_message(serv_l->chat, serv_l, sess_l, line))
+                OUTBUF_POST(sess_l, "The message is too long!\r\n");
+        }
+        return;
+    } else if (streq(line, "chat")) {
+        sess_l->is_in_chat = true;
+        chat_send_updates(serv_l->chat, sess_l, "In-game chat\r\n\r\n");
+        return;
+    }
 
     if (sv_data->state == gs_first_card && s_data->state == ps_defending)
         process_defender_first_card(sess_l, serv_l, line);
@@ -183,8 +199,6 @@ static void end_game_with_message(server_logic_t *serv_l, const char *msg)
         if (sess_l) {
             if (msg)
                 OUTBUF_POSTF(sess_l, "%s%s", clrscr, msg);
-            // @TEST
-            //sess_l->interf->quit = true;
             sess_l->interf->next_room = sv_data->hub_ref;
         }
     }
@@ -209,7 +223,7 @@ static void reset_server_logic(server_logic_t *serv_l)
     sv_data->attackers_left = 0;
 }
 
-static void send_updates_to_players(server_logic_t *serv_l);
+static void send_updates_to_all_players(server_logic_t *serv_l);
 
 static void replenish_hands(server_logic_t *serv_l);
 static void choose_first_turn(server_logic_t *serv_l);
@@ -232,7 +246,7 @@ static void start_game(server_logic_t *serv_l)
     replenish_hands(serv_l);
     choose_first_turn(serv_l);
 
-    send_updates_to_players(serv_l);
+    send_updates_to_all_players(serv_l);
 }
 
 static void replenish_hands(server_logic_t *serv_l)
@@ -324,7 +338,7 @@ static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t 
             // Once the first attacker card is placed, it is free for all
             enable_free_for_all(serv_l);
 
-            send_updates_to_players(serv_l);
+            send_updates_to_all_players(serv_l);
         } else
             respond_to_invalid_command(sess_l);
     }
@@ -360,7 +374,7 @@ static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_log
             switch_turn(serv_l, false);
 
         if (sv_data->state != gs_game_end)
-            send_updates_to_players(serv_l);
+            send_updates_to_all_players(serv_l);
     } else if (table_is_full(table, def_hand))
         respond_to_invalid_command(sess_l);
     else {
@@ -376,7 +390,7 @@ static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_log
             }
 
             if (sv_data->state != gs_game_end)
-                send_updates_to_players(serv_l);
+                send_updates_to_all_players(serv_l);
         } else
             respond_to_invalid_command(sess_l);
     }
@@ -400,7 +414,7 @@ static void process_defender_in_free_for_all(session_logic_t *sess_l, server_log
         else {
             switch_turn(serv_l, true);
             if (sv_data->state != gs_game_end)
-                send_updates_to_players(serv_l);
+                send_updates_to_all_players(serv_l);
         }
     } else if (table_is_beaten(table))
         respond_to_invalid_command(sess_l); // Cant defend at a beaten table
@@ -420,7 +434,7 @@ static void process_defender_in_free_for_all(session_logic_t *sess_l, server_log
             }
 
             if (sv_data->state != gs_game_end)
-                send_updates_to_players(serv_l);
+                send_updates_to_all_players(serv_l);
         } else
             respond_to_invalid_command(sess_l);
     }
@@ -435,92 +449,109 @@ static void sb_add_defender_prompt(string_builder_t *sb,
 static void sb_add_card(string_builder_t *sb, card_t card);
 
 
-static void send_updates_to_players(server_logic_t *serv_l)
+static void send_updates_to_all_players(server_logic_t *serv_l)
 {
+    for (int i = 0; i < serv_l->sess_cnt; i++)
+        send_updates_to_player(serv_l, i);
+}
+
+static void send_updates_to_player(server_logic_t *serv_l, int i)
+{
+    ASSERT(i >= 0 && i < serv_l->sess_cnt);
+    session_logic_t *sess_l = serv_l->sess_refs[i];
+    
+    if (sess_l->is_in_chat)
+        return;
+
     fool_server_data_t *sv_data = serv_l->data;
+    fool_session_data_t *s_data = sess_l->data;
+    string_builder_t *sb = sb_create();
 
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        session_logic_t *sess_l = serv_l->sess_refs[i];
-        fool_session_data_t *s_data = sess_l->data;
-        string_builder_t *sb = sb_create();
+    // Clear screen
+    sb_add_str(sb, clrscr);
 
-        // Clear screen
-        sb_add_str(sb, clrscr);
+    // Room name and list of players
+    sb_add_strf(sb, "Room: %s\r\n", serv_l->name);
+    sb_add_str(sb, "Players:");
 
-        // Room name and list of players
-        sb_add_strf(sb, "Room: %s\r\n", serv_l->name);
-        sb_add_str(sb, "Players:");
+    int num_players = serv_l->sess_cnt;
+    int player_idx = i;
+    for (dec_cycl(&player_idx, num_players); 
+            player_idx != i;
+            dec_cycl(&player_idx, num_players))
+    {
+        sb_add_strf(sb, " %s", serv_l->sess_refs[player_idx]->username);
+    }
+    sb_add_str(sb, "\r\n\r\n");
 
-        int num_players = serv_l->sess_cnt;
-        int player_idx = i;
-        for (dec_cycl(&player_idx, num_players); 
-                player_idx != i;
-                dec_cycl(&player_idx, num_players))
-        {
-            sb_add_strf(sb, " %s", serv_l->sess_refs[player_idx]->username);
+
+    // Player card counts
+    size_t chars_used = 0; 
+    player_idx = i;
+    for (dec_cycl(&player_idx, num_players); 
+            player_idx != i;
+            dec_cycl(&player_idx, num_players))
+    {
+        fool_session_data_t *p_data = serv_l->sess_refs[player_idx]->data;
+        const char *fmt = player_idx == sv_data->defender_index ? "| %d |   " : "< %d >   ";
+        chars_used += sb_add_strf(sb, fmt, p_data->hand->size);
+    }
+
+    // Deck info: trump & remaining cards
+    sb_add_strf(sb, "%*c", CHARS_TO_TRUMP - chars_used, ' ');
+    sb_add_card(sb, sv_data->deck.trump);
+    sb_add_strf(sb, "  [ %d ]\r\n", deck_size(&sv_data->deck));
+
+    // Table
+    table_t *table = &sv_data->table;
+    if (table->cards_played > 0) {
+        for (int i = 0; i < table->cards_played; i++) {
+            card_t **faceoff = table->faceoffs[i];
+            sb_add_str(sb, "\r\n   ");
+            sb_add_card(sb, *faceoff[0]);
+
+            // Print defender cards where they exist
+            if (i < table->cards_beat) {
+                sb_add_str(sb, " / ");
+                sb_add_card(sb, *faceoff[1]);
+            }
         }
         sb_add_str(sb, "\r\n\r\n");
-
-
-        // Player card counts
-        size_t chars_used = 0; 
-        player_idx = i;
-        for (dec_cycl(&player_idx, num_players); 
-                player_idx != i;
-                dec_cycl(&player_idx, num_players))
-        {
-            fool_session_data_t *p_data = serv_l->sess_refs[player_idx]->data;
-            const char *fmt = player_idx == sv_data->defender_index ? "| %d |   " : "< %d >   ";
-            chars_used += sb_add_strf(sb, fmt, p_data->hand->size);
-        }
-
-        // Deck info: trump & remaining cards
-        sb_add_strf(sb, "%*c", CHARS_TO_TRUMP - chars_used, ' ');
-        sb_add_card(sb, sv_data->deck.trump);
-        sb_add_strf(sb, "  [ %d ]\r\n", deck_size(&sv_data->deck));
-
-        // Table
-        table_t *table = &sv_data->table;
-        if (table->cards_played > 0) {
-            for (int i = 0; i < table->cards_played; i++) {
-                card_t **faceoff = table->faceoffs[i];
-                sb_add_str(sb, "\r\n   ");
-                sb_add_card(sb, *faceoff[0]);
-
-                // Print defender cards where they exist
-                if (i < table->cards_beat) {
-                    sb_add_str(sb, " / ");
-                    sb_add_card(sb, *faceoff[1]);
-                }
-            }
-            sb_add_str(sb, "\r\n\r\n");
-        }
-
-        // Hand
-        linked_list_t *hand = s_data->hand;
-        list_node_t *node = hand->head;
-        for (int i = 0; i < hand->size; i++) {
-            card_t *card = node->data;
-
-            sb_add_strf(sb, "%c: ", card_char_index(i));
-            sb_add_card(sb, *card);
-            sb_add_str(sb, "   ");
-
-            node = node->next;
-        }
-        sb_add_str(sb, "\r\n");
-
-        // Prompts
-        if (s_data->state == ps_attacking)
-            sb_add_attacker_prompt(sb, s_data->hand, serv_l);
-        else if (s_data->state == ps_defending)
-            sb_add_defender_prompt(sb, s_data->hand, serv_l);
-
-        char *full_str = sb_build_string(sb);
-        OUTBUF_POST(sess_l, full_str);
-        free(full_str);
-        sb_free(sb);
     }
+
+    // Hand
+    linked_list_t *hand = s_data->hand;
+    list_node_t *node = hand->head;
+    for (int i = 0; i < hand->size; i++) {
+        card_t *card = node->data;
+
+        sb_add_strf(sb, "%c: ", card_char_index(i));
+        sb_add_card(sb, *card);
+        sb_add_str(sb, "   ");
+
+        node = node->next;
+    }
+    sb_add_str(sb, "\r\n");
+
+    // Prompts
+    if (s_data->state == ps_attacking)
+        sb_add_attacker_prompt(sb, s_data->hand, serv_l);
+    else if (s_data->state == ps_defending)
+        sb_add_defender_prompt(sb, s_data->hand, serv_l);
+
+    char *full_str = sb_build_string(sb);
+    OUTBUF_POST(sess_l, full_str);
+    free(full_str);
+    sb_free(sb);
+}
+
+static int get_player_index(session_logic_t *sess_l, server_logic_t *serv_l)
+{
+    for (int i = 0; i < serv_l->sess_cnt; i++) {
+        if (sess_l == serv_l->sess_refs[i])
+            return i;
+    }
+    return -1;
 }
 
 static void respond_to_invalid_command(session_logic_t *sess_l)
