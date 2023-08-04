@@ -2,7 +2,6 @@
 #include "defs.h"
 #include "utils.h"
 #include "logic.h"
-#include "logic_presets.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,11 +14,10 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: factor username out to server framework level (since it is persistent data, this will also fix logic recreation)
-// @TODO: fix the multiple static inlusions warnings (create module?)
-
 // @TODO: create more helpful messages in hub and fool alike
 // @TODO: really do something about the naming (the logics, rooms and shit are confusing)
+// @TODO: make log_results a logic-level function with implementations
+// @TODO: refac
 
 // Phase 2
 // @TODO: riddles game
@@ -41,6 +39,7 @@ typedef struct session_tag {
 
     session_interface_t l_interf;
     session_logic_t *logic;
+    char *username;
 } session;
 
 typedef struct server_tag {
@@ -69,7 +68,8 @@ session *make_session(int fd, server_logic_t *room)
     sess->l_interf.need_to_register_username = false;
     sess->l_interf.quit = false;
 
-    sess->logic = make_session_logic(room, &sess->l_interf, NULL);
+    sess->username = NULL;
+    sess->logic = make_session_logic(room, &sess->l_interf, sess->username);
     return sess;
 }
 
@@ -77,6 +77,7 @@ void cleanup_session(session *sess)
 {
     if (sess->l_interf.out_buf) free(sess->l_interf.out_buf);
     if (sess->logic) destroy_session_logic(sess->logic);
+    if (sess->username) free(sess->username);
 }
 
 void session_check_lf(session *sess)
@@ -147,12 +148,9 @@ void switch_session_room(server *serv, session *sess)
 {
     ASSERT(sess->l_interf.next_room);
 
-    char *username = sess->logic->username ? strdup(sess->logic->username) : NULL;
     destroy_session_logic(sess->logic);
-    sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf, username);
+    sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf, sess->username);
     sess->l_interf.next_room = NULL;
-
-    serv->logged_in_usernames.data[sess->fd] = username;
 }
 
 void server_init(server *serv, int port)
@@ -286,7 +284,7 @@ int main(int argc, char **argv)
                 }  
 
                 if (sess->l_interf.need_to_register_username) {
-                    // @TODO: factor out?
+                    sess->username = sess->logic->username;
                     serv.logged_in_usernames.data[i] = sess->logic->username;
                     sess->l_interf.need_to_register_username = false;
                 } 

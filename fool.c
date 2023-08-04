@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include <limits.h>
 
-// @BUG: after disconnections the logic breaks
-
 typedef struct fool_session_data_tag {
     player_state_t state;
     linked_list_t *hand;

@@ -2,8 +2,37 @@
 #include "logic.h"
 #include "utils.h"
 #include "chat_funcs.h"
+#include "hub.h"
+#include "fool.h"
 #include <stdlib.h>
 #include <string.h>
+
+char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+                "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
+
+logic_preset_t hub_preset = {
+    .name                 = "",
+
+    .init_serv_f          = &hub_init_server_logic,
+    .deinit_serv_f        = &hub_deinit_server_logic,
+    .init_sess_f          = &hub_init_session_logic,
+    .deinit_sess_f        = &hub_deinit_session_logic,
+    .process_line_f       = &hub_process_line,
+    .serv_is_available_f  = &hub_server_is_available
+};
+
+logic_preset_t fool_preset = {
+    .name                 = "fool",
+
+    .init_serv_f          = &fool_init_server_logic,
+    .deinit_serv_f        = &fool_deinit_server_logic,
+    .init_sess_f          = &fool_init_session_logic,
+    .deinit_sess_f        = &fool_deinit_session_logic,
+    .process_line_f       = &fool_process_line,
+    .serv_is_available_f  = &fool_server_is_available
+};
 
 server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, 
                                   FILE *logs_file_handle, void *payload)
@@ -52,7 +81,6 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
 void destroy_session_logic(session_logic_t *sess_l)
 {
     ASSERT(sess_l);
-    if (sess_l->username) free(sess_l->username);
     (*sess_l->serv->preset->deinit_sess_f)(sess_l);
     free(sess_l);
 }

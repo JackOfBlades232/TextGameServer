@@ -91,10 +91,9 @@ static inline bool server_logic_is_available(server_logic_t *serv_l)
     _sess_l->interf->out_buf_len = sprintf(_sess_l->interf->out_buf, _fmt, ##__VA_ARGS__); \
 } while (0)
 
-static char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
-                       "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
-#define CLRSCR_LINES ((sizeof(clrscr)-1)/2)
+extern char clrscr[];
+
+extern logic_preset_t hub_preset;
+extern logic_preset_t fool_preset;
 
 #endif
