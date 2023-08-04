@@ -15,8 +15,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: implement statistics storage (records of type "username game matches wins losses")
-
 // @TODO: factor username out to server framework level (since it is persistent data, this will also fix logic recreation)
 // @TODO: fix the multiple static inlusions warnings (create module?)
 
@@ -27,7 +25,7 @@
 // @TODO: riddles game
 // @TODO: games list & create choice in hub
 
-// @TODO: implement variation with threads (one thread deals with a subset of containers)
+// @TODO: implement variation with threads (one thread deals with a subset of containers) OPTIONAL?
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
 // @TODO: implement normal quit on ^C and daemonization
 
@@ -53,7 +51,11 @@ typedef struct server_tag {
     // Custom logic
     server_logic_t *hub;
     sized_array_t logged_in_usernames;
+    FILE *result_logs_f;
 } server;
+
+// @TODO: generalize file path specification?
+static const char logs_path[] = "./res_logs.txt";
 
 session *make_session(int fd, server_logic_t *room)
 {
@@ -176,7 +178,10 @@ void server_init(server *serv, int port)
     serv->sessions = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->sessions));
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
-    serv->hub = make_server_logic(&hub_preset, NULL, &serv->logged_in_usernames);
+    serv->result_logs_f = fopen(logs_path, "a");
+    ASSERT(serv->result_logs_f);
+
+    serv->hub = make_server_logic(&hub_preset, NULL, serv->result_logs_f, &serv->logged_in_usernames);
     ASSERT(serv->hub);
 
     serv->logged_in_usernames.data = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->logged_in_usernames.data));

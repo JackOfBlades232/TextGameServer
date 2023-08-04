@@ -27,12 +27,10 @@ typedef enum hub_user_state_tag {
 } hub_user_state_t;
 
 typedef struct hub_server_data_tag {
-    FILE *passwd_f;
-    FILE *stats_f;
-
     server_logic_t **rooms;
     int rooms_size;
 
+    FILE *passwd_f;
     sized_array_t *logged_in_usernames_ref;
 } hub_server_data_t;
 
@@ -61,8 +59,6 @@ void hub_init_server_logic(server_logic_t *serv_l, void *payload)
     // @TODO: check passwd file correctness, including max word sizes
     sv_data->passwd_f = fopen(passwd_path, "r+");
     ASSERT(sv_data->passwd_f);
-    // @TODO: read stats file
-    sv_data->stats_f = NULL;
 }
 
 void hub_deinit_server_logic(server_logic_t *serv_l)
@@ -70,10 +66,7 @@ void hub_deinit_server_logic(server_logic_t *serv_l)
     free(serv_l->sess_refs);
 
     hub_server_data_t *sv_data = serv_l->data;
-
     if (sv_data->passwd_f) fclose(sv_data->passwd_f);
-    if (sv_data->stats_f) fclose(sv_data->stats_f);
-
     free(sv_data->rooms);
     free(sv_data);
 }
@@ -343,12 +336,12 @@ static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l
 
             // @TODO: factor out?
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, serv_l);
+            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, serv_l);
             sv_data->rooms[i] = room;
             break;
         } else if (!sv_data->rooms[i]) {
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, serv_l);
+            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, serv_l);
             sv_data->rooms[i] = room;
             break;
         } else if (sv_data->rooms[i]->sess_cnt <= 0) {

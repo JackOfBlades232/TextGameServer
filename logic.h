@@ -16,6 +16,7 @@ typedef struct server_logic_tag {
     int sess_cnt, sess_cap;
 
     chat_t *chat;
+    FILE *logs_file_handle;
 
     void *data;
 } server_logic_t;
@@ -59,7 +60,8 @@ struct session_logic_tag {
     void *data;
 };
 
-server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, void *payload);
+server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, 
+                                  FILE *logs_file_handle, void *payload);
 void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_l,
                                     session_interface_t *interf,

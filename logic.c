@@ -5,7 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, void *payload)
+server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, 
+                                  FILE *logs_file_handle, void *payload)
 {
     server_logic_t *serv_l = malloc(sizeof(*serv_l));
     serv_l->preset = preset;
@@ -15,6 +16,7 @@ server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, void *
         serv_l->name = strdup(preset->name);
 
     serv_l->chat = make_chat();
+    serv_l->logs_file_handle = logs_file_handle;
 
     (*preset->init_serv_f)(serv_l, payload);
 

@@ -1,0 +1,2 @@
+FOOL: room fool0, players(2): q(lost) 1(won)
+FOOL: room fool0, players(2): w(lost) q(won)

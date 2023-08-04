@@ -4,6 +4,7 @@
 #include "chat_funcs.h"
 #include "utils.h"
 #include "fool_data_structures.c"
+#include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 
@@ -651,6 +652,7 @@ static void sb_add_card(string_builder_t *sb, card_t card)
 static void advance_turns(server_logic_t *serv_l, int num_turns);
 static void send_win_lose_messages_to_players(server_logic_t *serv_l);
 static void send_draw_messages_to_players(server_logic_t *serv_l);
+static void log_game_results(server_logic_t *serv_l);
 
 static void switch_turn(server_logic_t *serv_l, bool defender_lost)
 {
@@ -678,12 +680,12 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
     if (sv_data->num_active_players == 1) {
         sv_data->state = gs_game_end;
         send_win_lose_messages_to_players(serv_l);
-
+        log_game_results(serv_l);
         end_game_with_message(serv_l, NULL);
     } else if (sv_data->num_active_players <= 0) {
         sv_data->state = gs_game_end;
         send_draw_messages_to_players(serv_l);
-
+        log_game_results(serv_l);
         end_game_with_message(serv_l, NULL);
     } else {
         sv_data->state = gs_first_card;
@@ -776,6 +778,24 @@ static void send_draw_messages_to_players(server_logic_t *serv_l)
     for (int i = 0; i < serv_l->sess_cnt; i++)
         OUTBUF_POSTF(serv_l->sess_refs[i], "%sSeems that nobody is the fool today! What a pity\r\n", clrscr);
 }
+
+static void log_game_results(server_logic_t *serv_l)
+{
+    fool_server_data_t *sv_data = serv_l->data;
+    fprintf(serv_l->logs_file_handle, "FOOL: room %s, players(%d):", 
+            serv_l->name, serv_l->sess_cnt);
+    for (int i = 0; i < serv_l->sess_cnt; i++) {
+        session_logic_t *sess_l = serv_l->sess_refs[i];
+        fool_session_data_t *s_data = sess_l->data;
+        const char *status = sv_data->num_active_players == 0 ? "draw" :
+                             (s_data->state == ps_spectating ? "won" : "lost");
+                            
+        fprintf(serv_l->logs_file_handle, " %s(%s)", sess_l->username, status);
+    }
+    fputc('\n', serv_l->logs_file_handle);
+    fflush(serv_l->logs_file_handle);
+}
+
 
 static fool_session_data_t *data_at_index(server_logic_t *serv_l, int sess_idx)
 {
