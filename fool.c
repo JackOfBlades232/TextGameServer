@@ -24,6 +24,8 @@ typedef struct fool_server_data_tag {
 
     deck_t deck;
     table_t table;
+
+    server_logic_t *hub_ref;
 } fool_server_data_t;
 
 // View
@@ -36,6 +38,10 @@ void fool_init_server_logic(server_logic_t *serv_l, void *payload)
     serv_l->sess_cap = MAX_PLAYERS_PER_GAME;
     serv_l->sess_refs = malloc(serv_l->sess_cap * sizeof(*serv_l->sess_refs));
     serv_l->data = malloc(sizeof(fool_server_data_t));
+
+    fool_server_data_t *sv_data = serv_l->data;
+    sv_data->hub_ref = payload;
+
     reset_server_logic(serv_l);
 }
 
@@ -51,7 +57,7 @@ void fool_init_session_logic(session_logic_t *sess_l)
 {
     sess_l->data = malloc(sizeof(fool_session_data_t));
 
-    // @TODO: factor out datas caching into a macro
+    // @TODO: factor out datas caching into a macro?
     fool_session_data_t *s_data = sess_l->data;
     server_logic_t *serv_l = sess_l->serv;
     fool_server_data_t *sv_data = serv_l->data;
@@ -63,11 +69,15 @@ void fool_init_session_logic(session_logic_t *sess_l)
         OUTBUF_POSTF(sess_l, "The server is full (%d/%d)!\r\n",
                      serv_l->sess_cap, serv_l->sess_cap);
         
-        sess_l->interf->quit = true;
+        // @TEST
+        //sess_l->interf->quit = true;
+        sess_l->interf->next_room = sv_data->hub_ref;
         return;
     } else if (sv_data->state != gs_awaiting_players) {
         OUTBUF_POST(sess_l, "The game has already started! Try again later\r\n");
-        sess_l->interf->quit = true;
+        // @TEST
+        //sess_l->interf->quit = true;
+        sess_l->interf->next_room = sv_data->hub_ref;
         return;
     }
 
@@ -110,9 +120,10 @@ void fool_deinit_session_logic(session_logic_t *sess_l)
     }
 
     // If a live player has disconnected, end the game
+    // @HUH: why is the !quit condition here? seems to work
     if (
             (sv_data->state == gs_first_card || sv_data->state == gs_free_for_all) &&
-            s_data->state != ps_spectating && !sess_l->interf->quit
+            s_data->state != ps_spectating && !sess_l->interf->quit && !sess_l->interf->next_room
        )
     {
         end_game_with_message(serv_l,  
@@ -166,12 +177,15 @@ static void end_game_with_message(server_logic_t *serv_l, const char *msg)
     // @HACK: the sess_cnt gets reset to 0 before the disconnections happen,
     //      so i had to hack this in deinit_session_logic. There might be a
     //      better solution
+    fool_server_data_t *sv_data = serv_l->data;
     for (int i = 0; i < serv_l->sess_cnt; i++) {
         session_logic_t *sess_l = serv_l->sess_refs[i]; 
         if (sess_l) {
             if (msg)
                 OUTBUF_POSTF(sess_l, "%s%s", clrscr, msg);
-            sess_l->interf->quit = true;
+            // @TEST
+            //sess_l->interf->quit = true;
+            sess_l->interf->next_room = sv_data->hub_ref;
         }
     }
 

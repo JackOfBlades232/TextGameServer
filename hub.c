@@ -132,7 +132,7 @@ static bool add_user(hub_server_data_t *sv_data, const char *usernm, const char 
 
 static void forward_message_to_all_users(server_logic_t *serv_l, session_logic_t *sess_l, const char *msg);
 static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l);
-static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_data);
+static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l);
 static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *sv_data, const char *room_name);
 
 // @TODO: refac?
@@ -202,7 +202,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                 if (streq(line, "list"))
                     send_rooms_list(sess_l, serv_l); 
                 else if (streq(line, "create"))
-                    create_and_join_room(sess_l, sv_data);
+                    create_and_join_room(sess_l, serv_l);
                 else if (strncmp(line, "join ", 5) == 0)
                     try_join_existing_room(sess_l, sv_data, line+5);
                 else
@@ -318,8 +318,10 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)
     sb_free(sb);
 }
 
-static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_data)
+static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l)
 {
+    hub_server_data_t *sv_data = serv_l->data;
+
     server_logic_t *room = NULL;
     for (int i = 0; i <= sv_data->rooms_size; i++) {
         char id[16];
@@ -339,12 +341,12 @@ static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_
 
             // @TODO: factor out?
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, NULL);
+            room = make_server_logic(&fool_preset, id, serv_l);
             sv_data->rooms[i] = room;
             break;
         } else if (!sv_data->rooms[i]) {
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, NULL);
+            room = make_server_logic(&fool_preset, id, serv_l);
             sv_data->rooms[i] = room;
             break;
         } else if (sv_data->rooms[i]->sess_cnt <= 0) {

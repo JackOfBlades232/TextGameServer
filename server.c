@@ -15,11 +15,10 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: one should be able to exit from game to hub, both voluntarily and if logic kicks.
-//      @IDEA: thus, the rooms created in the hub have to hold a ref to it. We could do this by having make/init take a void * payload
 // @TODO: implement fool modifications: nickname display, in-game chat module (with switch in-logic)
 // @TODO: think about statistics storage (how game-specific should they be?)
 
+// @TODO: factor username out to server framework level (since it is persistent data, this will also fix logic recreation)
 // @TODO: fix the multiple static inlusions warnings (create module?)
 
 // @TODO: implement variation with threads (one thread deals with a subset of containers)
