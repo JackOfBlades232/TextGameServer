@@ -447,10 +447,24 @@ static void send_updates_to_players(server_logic_t *serv_l)
         // Clear screen
         sb_add_str(sb, clrscr);
 
-        // Player card counts
+        // Room name and list of players
+        sb_add_strf(sb, "Room: %s\r\n", serv_l->name);
+        sb_add_str(sb, "Players:");
+
         int num_players = serv_l->sess_cnt;
-        size_t chars_used = 0; 
         int player_idx = i;
+        for (dec_cycl(&player_idx, num_players); 
+                player_idx != i;
+                dec_cycl(&player_idx, num_players))
+        {
+            sb_add_strf(sb, " %s", serv_l->sess_refs[player_idx]->username);
+        }
+        sb_add_str(sb, "\r\n\r\n");
+
+
+        // Player card counts
+        size_t chars_used = 0; 
+        player_idx = i;
         for (dec_cycl(&player_idx, num_players); 
                 player_idx != i;
                 dec_cycl(&player_idx, num_players))

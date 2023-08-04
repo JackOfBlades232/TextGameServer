@@ -16,7 +16,7 @@
 #include <netinet/in.h>
 
 // @TODO: implement fool modifications: nickname display, in-game chat module (with switch in-logic)
-// @TODO: think about statistics storage (how game-specific should they be?)
+// @TODO: implement statistics storage (records of type "username game matches wins losses")
 
 // @TODO: factor username out to server framework level (since it is persistent data, this will also fix logic recreation)
 // @TODO: fix the multiple static inlusions warnings (create module?)
