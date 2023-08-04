@@ -205,7 +205,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     create_and_join_room(sess_l, serv_l);
                 else if (strncmp(line, "join ", 5) == 0)
                     try_join_existing_room(sess_l, sv_data, line+5);
-                else
+                else if (strlen(line) > 0)
                     forward_message_to_all_users(serv_l, sess_l, line);
             } break;
     }

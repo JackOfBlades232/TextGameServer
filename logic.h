@@ -51,6 +51,7 @@ struct session_logic_tag {
     session_interface_t *interf;
 
     char *username;
+    bool is_in_chat;
 
     void *data;
 };
@@ -60,8 +61,8 @@ void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_l,
                                     session_interface_t *interf,
                                     char *username);
-void destroy_session_logic(session_logic_t *sess_s);
-void session_logic_process_line(session_logic_t *sess_s, const char *line);
+void destroy_session_logic(session_logic_t *sess_l);
+void session_logic_process_line(session_logic_t *sess_l, const char *line);
 
 // Not passing the line in, just process the event (like send smth and quit)
 void session_logic_process_too_long_line(session_logic_t *sess_l);

@@ -37,6 +37,7 @@ session_logic_t *make_session_logic(server_logic_t *serv_l,
     sess_l->serv = serv_l;
     sess_l->interf = interf;
     sess_l->username = username;
+    sess_l->is_in_chat = false;
     (*serv_l->preset->init_sess_f)(sess_l);
 
     return sess_l;
