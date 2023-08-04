@@ -16,11 +16,6 @@
 // @TODO: generalize file path specification?
 static const char passwd_path[] = "./passwd.txt";
 
-// @TODO: restrict only one session per username
-//  @IDEA: since there is only one place where all the sessions live -- server,
-//  we need to make an interf flag "check username", and then roll back the user state if
-//  he already exists
-
 // @TODO: refac
 
 typedef enum hub_user_state_tag {
@@ -36,6 +31,8 @@ typedef struct hub_server_data_tag {
 
     server_logic_t **rooms;
     int rooms_size;
+
+    sized_array_t *logged_in_usernames_ref;
 } hub_server_data_t;
 
 typedef struct hub_session_data_tag {
@@ -43,7 +40,7 @@ typedef struct hub_session_data_tag {
     char *expected_password;
 } hub_session_data_t;
 
-void hub_init_server_logic(server_logic_t *serv_l)
+void hub_init_server_logic(server_logic_t *serv_l, void *payload)
 {
     serv_l->sess_cap = INIT_SESS_REFS_ARR_SIZE;
     serv_l->sess_cnt = 0;
@@ -63,6 +60,8 @@ void hub_init_server_logic(server_logic_t *serv_l)
 
     for (int i = 0; i < sv_data->rooms_size; i++)
         sv_data->rooms[i] = NULL;
+
+    sv_data->logged_in_usernames_ref = payload;
 }
 
 void hub_deinit_server_logic(server_logic_t *serv_l)
@@ -127,6 +126,7 @@ void hub_deinit_session_logic(session_logic_t *sess_l)
     free(s_data);
 }
 
+static bool user_already_logged_in(hub_server_data_t *sv_data, const char *usernm);
 static char *lookup_username_and_get_password(hub_server_data_t *sv_data, const char *usernm);
 static bool add_user(hub_server_data_t *sv_data, const char *usernm, const char *passwd);
 
@@ -145,6 +145,10 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
     switch (s_data->state) {
         case hs_input_username:
             {
+                if (user_already_logged_in(sv_data, line)) {
+                    OUTBUF_POST(sess_l, "Such a user is already logged in, try another account\r\nInput your username: ");
+                    break;
+                }
                 sess_l->username = strdup(line);
                 s_data->expected_password = lookup_username_and_get_password(sv_data, line);
                 if (s_data->expected_password) {
@@ -158,10 +162,16 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
 
         case hs_input_passwd:
             {
+                if (user_already_logged_in(sv_data, sess_l->username)) {
+                    s_data->state = hs_input_username;
+                    OUTBUF_POST(sess_l, "While you were thiking, someone has logged into this account!\r\nInput your username: ");
+                    break;
+                }
                 if (streq(s_data->expected_password, line)) {
                     // @TODO: add more helpful greeting
                     OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\n", clrscr);
                     s_data->state = hs_global_chat;
+                    sess_l->interf->need_to_register_username = true;
                 } else {
                     s_data->state = hs_input_username;
                     OUTBUF_POST(sess_l, "The password is incorrect! Rack your memory and try again\r\nInput your username: ");
@@ -172,9 +182,15 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
 
         case hs_create_user:
             {
+                if (user_already_logged_in(sv_data, sess_l->username)) {
+                    s_data->state = hs_input_username;
+                    OUTBUF_POST(sess_l, "While you were thiking, someone has logged into this account!\r\nInput your username: ");
+                    break;
+                }
                 if (add_user(sv_data, sess_l->username, line)) {
                     OUTBUF_POSTF(sess_l, "%sWelcome to the global chat!\r\n", clrscr);
                     s_data->state = hs_global_chat;
+                    sess_l->interf->need_to_register_username = true;
                 } else {
                     s_data->state = hs_input_username;
                     OUTBUF_POST(sess_l, "The username or password is invalid, try registering again\r\nInput your username: ");
@@ -199,6 +215,17 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
 bool hub_server_is_available(server_logic_t *serv_l)
 {
     return true;
+}
+
+static bool user_already_logged_in(hub_server_data_t *sv_data, const char *usernm)
+{
+    for (int i = 0; i < sv_data->logged_in_usernames_ref->size; i++) {
+        char *existing_name = sv_data->logged_in_usernames_ref->data[i];
+        if (existing_name && streq(usernm, existing_name))
+            return true;
+    }
+
+    return false;
 }
 
 static char *lookup_username_and_get_password(hub_server_data_t *sv_data, const char *usernm)
@@ -312,12 +339,12 @@ static void create_and_join_room(session_logic_t *sess_l, hub_server_data_t *sv_
 
             // @TODO: factor out?
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id);
+            room = make_server_logic(&fool_preset, id, NULL);
             sv_data->rooms[i] = room;
             break;
         } else if (!sv_data->rooms[i]) {
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id);
+            room = make_server_logic(&fool_preset, id, NULL);
             sv_data->rooms[i] = room;
             break;
         } else if (sv_data->rooms[i]->sess_cnt <= 0) {

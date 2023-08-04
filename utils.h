@@ -7,6 +7,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+typedef struct sized_array_tag {
+    void **data;
+    int size;
+} sized_array_t;
+
 typedef struct list_node_tag {
     void *data;
     struct list_node_tag *next, *prev;

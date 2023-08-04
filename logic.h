@@ -22,12 +22,13 @@ typedef struct session_interface_tag {
     int out_buf_len;
 
     server_logic_t *next_room;
+    bool need_to_register_username;
 
     bool quit;
 } session_interface_t;
 
 // Functions for working with session/server data & interface in different logic modules
-typedef void (*init_serv_func_t)(server_logic_t *);
+typedef void (*init_serv_func_t)(server_logic_t *, void *payload);
 typedef void (*deinit_serv_func_t)(server_logic_t *);
 typedef void (*init_sess_func_t)(session_logic_t *);
 typedef void (*deinit_sess_func_t)(session_logic_t *);
@@ -54,7 +55,7 @@ struct session_logic_tag {
     void *data;
 };
 
-server_logic_t *make_server_logic(logic_preset_t *preset, const char *id);
+server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, void *payload);
 void destroy_server_logic(server_logic_t *serv_l);
 session_logic_t *make_session_logic(server_logic_t *serv_l,
                                     session_interface_t *interf,

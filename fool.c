@@ -31,7 +31,7 @@ typedef struct fool_server_data_tag {
 
 static void reset_server_logic(server_logic_t *serv_l);
 
-void fool_init_server_logic(server_logic_t *serv_l)
+void fool_init_server_logic(server_logic_t *serv_l, void *payload)
 {
     serv_l->sess_cap = MAX_PLAYERS_PER_GAME;
     serv_l->sess_refs = malloc(serv_l->sess_cap * sizeof(*serv_l->sess_refs));

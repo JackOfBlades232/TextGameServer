@@ -1,5 +1,6 @@
 /* TextGameServer/server.c */
 #include "defs.h"
+#include "utils.h"
 #include "logic.h"
 #include "logic_presets.h"
 #include <stdio.h>
@@ -46,7 +47,9 @@ typedef struct server_tag {
     session **sessions;
     int sessions_size;
 
+    // Custom logic
     server_logic_t *hub;
+    sized_array_t logged_in_usernames;
 } server;
 
 session *make_session(int fd, server_logic_t *room)
@@ -58,6 +61,7 @@ session *make_session(int fd, server_logic_t *room)
     sess->l_interf.out_buf = NULL;
     sess->l_interf.out_buf_len = 0;
     sess->l_interf.next_room = NULL;
+    sess->l_interf.need_to_register_username = false;
     sess->l_interf.quit = false;
 
     sess->logic = make_session_logic(room, &sess->l_interf, NULL);
@@ -134,14 +138,16 @@ bool session_do_write(session *sess)
     return true;
 }
 
-void session_switch_room(session *sess)
+void switch_session_room(server *serv, session *sess)
 {
     ASSERT(sess->l_interf.next_room);
 
-    char *username = strdup(sess->logic->username);
+    char *username = sess->logic->username ? strdup(sess->logic->username) : NULL;
     destroy_session_logic(sess->logic);
     sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf, username);
     sess->l_interf.next_room = NULL;
+
+    serv->logged_in_usernames.data[sess->fd] = username;
 }
 
 void server_init(server *serv, int port)
@@ -167,8 +173,11 @@ void server_init(server *serv, int port)
     serv->sessions = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->sessions));
     serv->sessions_size = INIT_SESS_ARR_SIZE;
 
-    serv->hub = make_server_logic(&hub_preset, NULL);
+    serv->hub = make_server_logic(&hub_preset, NULL, &serv->logged_in_usernames);
     ASSERT(serv->hub);
+
+    serv->logged_in_usernames.data = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->logged_in_usernames.data));
+    serv->logged_in_usernames.size = INIT_SESS_ARR_SIZE;
 }
 
 void server_accept_client(server *serv)
@@ -188,9 +197,13 @@ void server_accept_client(server *serv)
             newsize += INIT_SESS_ARR_SIZE;
         serv->sessions = 
             realloc(serv->sessions, newsize * sizeof(*serv->sessions));
+        serv->logged_in_usernames.data = 
+            realloc(serv->logged_in_usernames.data,
+                    newsize * sizeof(*serv->logged_in_usernames.data));
         for (int i = serv->sessions_size; i < newsize; i++)
             serv->sessions[i] = NULL;
         serv->sessions_size = newsize;
+        serv->logged_in_usernames.size = newsize;
     }
 
     serv->sessions[sd] = make_session(sd, serv->hub);
@@ -203,6 +216,7 @@ void server_close_session(server *serv, int sd)
     cleanup_session(serv->sessions[sd]);
     free(serv->sessions[sd]);
     serv->sessions[sd] = NULL;
+    serv->logged_in_usernames.data[sd] = NULL;
 }
 
 void init_subsystems()
@@ -260,11 +274,17 @@ int main(int argc, char **argv)
                    ) 
                 {
                     server_close_session(&serv, i);
-                }
+                    continue;
+                }  
 
-                // If sent all that was in the buffer and not quitting, and logic says "next room", do so
+                if (sess->l_interf.need_to_register_username) {
+                    // @TODO: factor out?
+                    serv.logged_in_usernames.data[i] = sess->logic->username;
+                    sess->l_interf.need_to_register_username = false;
+                } 
+
                 if (sess->l_interf.next_room && !sess->l_interf.quit && !sess->l_interf.out_buf) 
-                    session_switch_room(sess);
+                    switch_session_room(&serv, sess);
             }
         }
     }
