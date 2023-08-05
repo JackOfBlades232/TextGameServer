@@ -80,7 +80,13 @@ void fool_init_session_logic(session_logic_t *sess_l)
 
     OUTBUF_POSTF(sess_l,
             "%sWelcome to the game of FOOL! "
-            "Once there is one more player, you can press ENTER to start the game\r\n", 
+            "Once there is one more player, you can press ENTER to start the game\r\n"
+            "Commands\r\n"
+            "   <quit>: quit the game, works at any moment\r\n"
+            "   <chat>: switch to in-game chat, works only when the game is in progress\r\n"
+            "   <game>: switch back from chat to game\r\n"
+            "   any letter: play the card indexed by the letter (if you can play that card)\r\n"
+            "   empty line: pass (if rules allow it right now)\r\n", 
             clrscr);
     serv_l->sess_refs[serv_l->sess_cnt++] = sess_l;
 

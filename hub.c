@@ -33,6 +33,14 @@ typedef struct hub_session_data_tag {
     char *expected_password;
 } hub_session_data_t;
 
+static const char global_chat_greeting[] = 
+        "Welcome to the global chat!\r\n"
+        "Commands:\r\n"
+        "   <list>: list all current rooms\r\n"
+        "   <create>: create a new room\r\n"
+        "   <join *room name*>: join a room\r\n"
+        "   anything else: send message to char\r\n\r\n";
+
 static bool passwd_file_is_correct(hub_server_data_t *sv_data);
 
 void hub_init_server_logic(server_logic_t *serv_l, void *payload)
@@ -68,6 +76,13 @@ void hub_deinit_server_logic(server_logic_t *serv_l)
     free(sv_data);
 }
 
+static inline void enter_global_chat(session_logic_t *sess_l, hub_session_data_t *s_data, server_logic_t *serv_l)
+{
+    sess_l->is_in_chat = true;
+    chat_send_updates(serv_l->chat, sess_l, global_chat_greeting);
+    s_data->state = hs_global_chat;
+}
+
 void hub_init_session_logic(session_logic_t *sess_l)
 {
     sess_l->data = malloc(sizeof(hub_session_data_t));
@@ -76,12 +91,9 @@ void hub_init_session_logic(session_logic_t *sess_l)
     hub_session_data_t *s_data = sess_l->data;
 
     // Check if this is first switch to hub. if not, straight to glob chat. Otherwise, login
-    if (sess_l->username) {
-        sess_l->is_in_chat = true;
-        chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
-
-        s_data->state = hs_global_chat;
-    } else {
+    if (sess_l->username)
+        enter_global_chat(sess_l, s_data, serv_l);
+    else {
         s_data->state = hs_input_username;
         s_data->expected_password = NULL;
         OUTBUF_POSTF(sess_l, "%sWelcome to the TextGameServer! Input your username: ", clrscr);
@@ -160,10 +172,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     break;
                 }
                 if (streq(s_data->expected_password, line)) {
-                    sess_l->is_in_chat = true;
-                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
-
-                    s_data->state = hs_global_chat;
+                    enter_global_chat(sess_l, s_data, serv_l);
                     sess_l->interf->need_to_register_username = true;
                 } else {
                     s_data->state = hs_input_username;
@@ -181,10 +190,7 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     break;
                 }
                 if (add_user(sv_data, sess_l->username, line)) {
-                    sess_l->is_in_chat = true;
-                    chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
-
-                    s_data->state = hs_global_chat;
+                    enter_global_chat(sess_l, s_data, serv_l);
                     sess_l->interf->need_to_register_username = true;
                 } else {
                     s_data->state = hs_input_username;
@@ -290,7 +296,7 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)
 {
     hub_server_data_t *sv_data = serv_l->data;
     string_builder_t *sb = sb_create();
-    sb_add_str(sb, "\r\nServer rooms:\r\n");
+    sb_add_strf(sb, "\r\nServer rooms (max=%d):\r\n", MAX_ROOMS_ARR_SIZE);
     for (int i = 0; i < sv_data->rooms_size; i++) {
         server_logic_t *room = sv_data->rooms[i];
         if (room)

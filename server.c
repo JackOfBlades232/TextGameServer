@@ -14,9 +14,7 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: create more helpful messages in hub and fool alike
 // @TODO: really do something about the naming (the logics, rooms and shit are confusing)
-// @TODO: refac
 
 // Phase 2
 // @TODO: riddles game
