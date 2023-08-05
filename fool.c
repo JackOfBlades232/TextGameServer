@@ -41,7 +41,8 @@ void fool_init_server_logic(server_logic_t *serv_l, void *payload)
     serv_l->data = malloc(sizeof(fool_server_data_t));
 
     fool_server_data_t *sv_data = serv_l->data;
-    sv_data->hub_ref = payload;
+    game_payload_t *payload_data = payload;
+    sv_data->hub_ref = payload_data->hub_ref;
 
     reset_server_logic(serv_l);
 }

@@ -16,7 +16,6 @@
 
 // @TODO: create more helpful messages in hub and fool alike
 // @TODO: really do something about the naming (the logics, rooms and shit are confusing)
-// @TODO: make log_results a logic-level function with implementations
 // @TODO: refac
 
 // Phase 2
@@ -53,7 +52,7 @@ typedef struct server_tag {
     FILE *result_logs_f;
 } server;
 
-// @TODO: generalize file path specification?
+static const char passwd_path[] = "./passwd.txt";
 static const char logs_path[] = "./res_logs.txt";
 
 session *make_session(int fd, server_logic_t *room)
@@ -179,7 +178,11 @@ void server_init(server *serv, int port)
     serv->result_logs_f = fopen(logs_path, "a");
     ASSERT(serv->result_logs_f);
 
-    serv->hub = make_server_logic(&hub_preset, NULL, serv->result_logs_f, &serv->logged_in_usernames);
+    hub_payload_t payload = { 
+        .logged_in_usernames = &serv->logged_in_usernames, 
+        .passwd_path = passwd_path
+    };
+    serv->hub = make_server_logic(&hub_preset, NULL, serv->result_logs_f, &payload);
     ASSERT(serv->hub);
 
     serv->logged_in_usernames.data = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->logged_in_usernames.data));

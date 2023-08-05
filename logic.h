@@ -4,6 +4,7 @@
 
 #include "defs.h"
 #include "chat.h"
+#include "utils.h"
 
 typedef struct logic_preset_tag logic_preset_t;
 typedef struct session_logic_tag session_logic_t;
@@ -95,5 +96,14 @@ extern char clrscr[];
 
 extern logic_preset_t hub_preset;
 extern logic_preset_t fool_preset;
+
+typedef struct hub_payload_tag {
+    sized_array_t *logged_in_usernames;
+    const char *passwd_path;
+} hub_payload_t;
+
+typedef struct game_payload_tag {
+    server_logic_t *hub_ref;
+} game_payload_t;
 
 #endif

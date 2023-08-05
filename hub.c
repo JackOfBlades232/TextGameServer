@@ -13,9 +13,6 @@
 
 #define CREDENTIAL_MAX_LEN      64
 
-// @TODO: generalize file path specification?
-static const char passwd_path[] = "./passwd.txt";
-
 // @TODO: refac
 
 typedef enum hub_user_state_tag {
@@ -38,6 +35,8 @@ typedef struct hub_session_data_tag {
     char *expected_password;
 } hub_session_data_t;
 
+static bool passwd_file_is_correct(hub_server_data_t *sv_data);
+
 void hub_init_server_logic(server_logic_t *serv_l, void *payload)
 {
     serv_l->sess_cap = INIT_SESS_REFS_ARR_SIZE;
@@ -53,11 +52,12 @@ void hub_init_server_logic(server_logic_t *serv_l, void *payload)
     for (int i = 0; i < sv_data->rooms_size; i++)
         sv_data->rooms[i] = NULL;
 
-    sv_data->logged_in_usernames_ref = payload;
+    hub_payload_t *payload_data = payload;
+    sv_data->logged_in_usernames_ref = payload_data->logged_in_usernames;
 
-    // @TODO: check passwd file correctness, including max word sizes
-    sv_data->passwd_f = fopen(passwd_path, "r+");
-    ASSERT(sv_data->passwd_f);
+    sv_data->passwd_f = fopen(payload_data->passwd_path, "r+");
+    ASSERT_ERR(sv_data->passwd_f);
+    ASSERTF(passwd_file_is_correct(sv_data), "Invalid password file\n");
 }
 
 void hub_deinit_server_logic(server_logic_t *serv_l)
@@ -315,6 +315,7 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l)
 static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l)
 {
     hub_server_data_t *sv_data = serv_l->data;
+    game_payload_t payload = { .hub_ref = serv_l };
 
     server_logic_t *room = NULL;
     for (int i = 0; i <= sv_data->rooms_size; i++) {
@@ -335,12 +336,12 @@ static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l
 
             // @TODO: factor out?
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, serv_l);
+            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, &payload);
             sv_data->rooms[i] = room;
             break;
         } else if (!sv_data->rooms[i]) {
             sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, serv_l);
+            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, &payload);
             sv_data->rooms[i] = room;
             break;
         } else if (sv_data->rooms[i]->sess_cnt <= 0) {
@@ -364,4 +365,27 @@ static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *s
     }
 
     OUTBUF_POST(sess_l, "Couldn't access the chosen room! Sumimasen\r\n");
+}
+
+static bool passwd_file_is_correct(hub_server_data_t *sv_data)
+{
+    FILE *f = sv_data->passwd_f;
+    rewind(f);
+
+    char cred_buf[CREDENTIAL_MAX_LEN+2];
+    size_t buflen;
+    int break_c = '\0';
+
+    bool reading_usernm = true;
+    while (break_c != EOF) {
+        buflen = fread_word_to_buf(f, cred_buf, sizeof(cred_buf), &break_c);
+        if (buflen == 0)
+            continue;
+        else if (buflen > CREDENTIAL_MAX_LEN)
+            return false;
+
+        reading_usernm = !reading_usernm;
+    }
+
+    return reading_usernm;
 }
