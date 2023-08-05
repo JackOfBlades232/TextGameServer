@@ -6,8 +6,6 @@
 
 #define MAX_CHAT_MSG_LEN 64
 
-// @TODO: refac dumb 2-field null checks
-
 chat_t *make_chat()
 {
     chat_t *c = malloc(sizeof(*c));
@@ -16,6 +14,7 @@ chat_t *make_chat()
     for (int i = 0; i < CHAT_MSG_HISTORY_SIZE; i++) {
         c->history[i].username = NULL;
         c->history[i].content = NULL;
+        c->history[i].used = false;
     }
 
     return c;
@@ -35,18 +34,18 @@ void destroy_chat(chat_t *c)
 bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
                            session_logic_t *author_sl, const char *msg)
 {
-    // @TODO: deal with this case correctly
-    if (!author_sl->is_in_chat)
-        return true;
+    ASSERT(author_sl->is_in_chat);
 
     if (strlen(msg) > MAX_CHAT_MSG_LEN)
         return false;
 
-    if (c->history[c->head].username && c->history[c->head].content && c->tail == c->head)
+    if (c->history[c->head].used && c->tail == c->head)
         inc_cycl(&c->head, CHAT_MSG_HISTORY_SIZE);
 
     c->history[c->tail].username = strdup(author_sl->username);
     c->history[c->tail].content = strdup(msg);
+    c->history[c->tail].used = true;
+
     inc_cycl(&c->tail, CHAT_MSG_HISTORY_SIZE);
 
     for (int i = 0; i < serv_l->sess_cnt; i++) {
@@ -60,9 +59,7 @@ bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
 
 void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
 {
-    // @TODO: deal with this case correctly
-    if (!sess_l->is_in_chat)
-        return;
+    ASSERT(sess_l->is_in_chat);
 
     string_builder_t *sb = sb_create();
     sb_add_str(sb, clrscr);
@@ -72,7 +69,7 @@ void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
     int msg_idx = c->head;
     for (int i = 0; i < CHAT_MSG_HISTORY_SIZE; i++) {
         chat_message_t *msg = &c->history[msg_idx];
-        if (!msg->username || !msg->content)
+        if (!msg->used)
             break;
 
         if (streq(sess_l->username, msg->username))

@@ -91,7 +91,6 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line)
 }
 
 // This reaction will be mutual for all logics
-// @HUH: maybe this should be also logic-dependant?
 void session_logic_process_too_long_line(session_logic_t *sess_l)
 {
     OUTBUF_POST(sess_l, "ERR: Line was too long\r\n");
