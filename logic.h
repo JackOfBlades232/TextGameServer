@@ -6,11 +6,11 @@
 #include "chat.h"
 #include "utils.h"
 
-typedef struct logic_preset_tag logic_preset_t;
+typedef struct room_preset_tag room_preset_t;
 typedef struct session_logic_tag session_logic_t;
 
-typedef struct server_logic_tag {
-    logic_preset_t *preset;
+typedef struct server_room_tag {
+    room_preset_t *preset;
 
     char *name;
     session_logic_t **sess_refs;
@@ -20,39 +20,39 @@ typedef struct server_logic_tag {
     FILE *logs_file_handle;
 
     void *data;
-} server_logic_t;
+} server_room_t;
 
 typedef struct session_interface_tag {
     char *out_buf;
     int out_buf_len;
 
-    server_logic_t *next_room;
+    server_room_t *next_room;
     bool need_to_register_username;
 
     bool quit;
 } session_interface_t;
 
 // Functions for working with session/server data & interface in different logic modules
-typedef void (*init_serv_func_t)(server_logic_t *, void *payload);
-typedef void (*deinit_serv_func_t)(server_logic_t *);
+typedef void (*init_room_func_t)(server_room_t *, void *payload);
+typedef void (*deinit_room_func_t)(server_room_t *);
 typedef void (*init_sess_func_t)(session_logic_t *);
 typedef void (*deinit_sess_func_t)(session_logic_t *);
 typedef void (*state_process_line_func_t)(session_logic_t *, const char *);
-typedef bool (*serv_is_available_func_t)(server_logic_t *);
+typedef bool (*room_is_available_func_t)(server_room_t *);
 
-struct logic_preset_tag {
+struct room_preset_tag {
     const char *name;
 
-    init_serv_func_t           init_serv_f;
-    deinit_serv_func_t         deinit_serv_f;
+    init_room_func_t           init_room_f;
+    deinit_room_func_t         deinit_room_f;
     init_sess_func_t           init_sess_f;
     deinit_sess_func_t         deinit_sess_f;
     state_process_line_func_t  process_line_f;
-    serv_is_available_func_t   serv_is_available_f;
+    room_is_available_func_t   room_is_available_f;
 };
 
 struct session_logic_tag {
-    server_logic_t *serv;
+    server_room_t *room;
     session_interface_t *interf;
 
     char *username;
@@ -61,10 +61,10 @@ struct session_logic_tag {
     void *data;
 };
 
-server_logic_t *make_server_logic(logic_preset_t *preset, const char *id, 
-                                  FILE *logs_file_handle, void *payload);
-void destroy_server_logic(server_logic_t *serv_l);
-session_logic_t *make_session_logic(server_logic_t *serv_l,
+server_room_t *make_room(room_preset_t *preset, const char *id, 
+                         FILE *logs_file_handle, void *payload);
+void destroy_room(server_room_t *s_room);
+session_logic_t *make_session_logic(server_room_t *s_room,
                                     session_interface_t *interf,
                                     char *username);
 void destroy_session_logic(session_logic_t *sess_l);
@@ -73,9 +73,9 @@ void session_logic_process_line(session_logic_t *sess_l, const char *line);
 // Not passing the line in, just process the event (like send smth and quit)
 void session_logic_process_too_long_line(session_logic_t *sess_l);
 
-static inline bool server_logic_is_available(server_logic_t *serv_l)
+static inline bool room_is_available(server_room_t *s_room)
 {
-    return (*serv_l->preset->serv_is_available_f)(serv_l);
+    return (*s_room->preset->room_is_available_f)(s_room);
 }
 
 // Universal utility thigys for posting responses
@@ -94,8 +94,8 @@ static inline bool server_logic_is_available(server_logic_t *serv_l)
 
 extern char clrscr[];
 
-extern logic_preset_t hub_preset;
-extern logic_preset_t fool_preset;
+extern room_preset_t hub_preset;
+extern room_preset_t fool_preset;
 
 typedef struct hub_payload_tag {
     sized_array_t *logged_in_usernames;
@@ -103,7 +103,7 @@ typedef struct hub_payload_tag {
 } hub_payload_t;
 
 typedef struct game_payload_tag {
-    server_logic_t *hub_ref;
+    server_room_t *hub_ref;
 } game_payload_t;
 
 #endif

@@ -45,7 +45,7 @@ typedef struct server_tag {
     int sessions_size;
 
     // Custom logic
-    server_logic_t *hub;
+    server_room_t *hub;
     sized_array_t logged_in_usernames;
     FILE *result_logs_f;
 } server;
@@ -53,7 +53,7 @@ typedef struct server_tag {
 static const char passwd_path[] = "./passwd.txt";
 static const char logs_path[] = "./res_logs.txt";
 
-session *make_session(int fd, server_logic_t *room)
+session *make_session(int fd, server_room_t *room)
 {
     session *sess = malloc(sizeof(*sess));
     sess->fd = fd;
@@ -181,7 +181,7 @@ void server_init(server *serv, int port)
         .logged_in_usernames = &serv->logged_in_usernames, 
         .passwd_path = passwd_path
     };
-    serv->hub = make_server_logic(&hub_preset, NULL, serv->result_logs_f, &payload);
+    serv->hub = make_room(&hub_preset, NULL, serv->result_logs_f, &payload);
     ASSERT(serv->hub);
 
     serv->logged_in_usernames.data = calloc(INIT_SESS_ARR_SIZE, sizeof(*serv->logged_in_usernames.data));

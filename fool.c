@@ -15,7 +15,7 @@ typedef struct fool_session_data_tag {
     bool can_attack;
 } fool_session_data_t;
 
-typedef struct fool_server_data_tag {
+typedef struct fool_room_data_tag {
     game_state_t state;
     int num_active_players;
 
@@ -26,55 +26,55 @@ typedef struct fool_server_data_tag {
     deck_t deck;
     table_t table;
 
-    server_logic_t *hub_ref;
-} fool_server_data_t;
+    server_room_t *hub_ref;
+} fool_room_data_t;
 
 // View
 #define CHARS_TO_TRUMP 70
 
-static void reset_server_logic(server_logic_t *serv_l);
+static void reset_room(server_room_t *s_room);
 
-void fool_init_server_logic(server_logic_t *serv_l, void *payload)
+void fool_init_room(server_room_t *s_room, void *payload)
 {
-    serv_l->sess_cap = MAX_PLAYERS_PER_GAME;
-    serv_l->sess_refs = malloc(serv_l->sess_cap * sizeof(*serv_l->sess_refs));
-    serv_l->data = malloc(sizeof(fool_server_data_t));
+    s_room->sess_cap = MAX_PLAYERS_PER_GAME;
+    s_room->sess_refs = malloc(s_room->sess_cap * sizeof(*s_room->sess_refs));
+    s_room->data = malloc(sizeof(fool_room_data_t));
 
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
     game_payload_t *payload_data = payload;
-    sv_data->hub_ref = payload_data->hub_ref;
+    r_data->hub_ref = payload_data->hub_ref;
 
-    reset_server_logic(serv_l);
+    reset_room(s_room);
 }
 
-void fool_deinit_server_logic(server_logic_t *serv_l)
+void fool_deinit_room(server_room_t *s_room)
 {
-    free(serv_l->data);
-    free(serv_l->sess_refs);
+    free(s_room->data);
+    free(s_room->sess_refs);
 }
 
-static void start_game(server_logic_t *serv_l);
+static void start_game(server_room_t *s_room);
 
 void fool_init_session_logic(session_logic_t *sess_l)
 {
     sess_l->data = malloc(sizeof(fool_session_data_t));
 
     fool_session_data_t *s_data = sess_l->data;
-    server_logic_t *serv_l = sess_l->serv;
-    fool_server_data_t *sv_data = serv_l->data;
+    server_room_t *s_room = sess_l->room;
+    fool_room_data_t *r_data = s_room->data;
 
     s_data->state = ps_waiting;
     s_data->hand = ll_create();
 
-    if (serv_l->sess_cnt >= serv_l->sess_cap) {
+    if (s_room->sess_cnt >= s_room->sess_cap) {
         OUTBUF_POSTF(sess_l, "The server is full (%d/%d)!\r\n",
-                     serv_l->sess_cap, serv_l->sess_cap);
+                     s_room->sess_cap, s_room->sess_cap);
         
-        sess_l->interf->next_room = sv_data->hub_ref;
+        sess_l->interf->next_room = r_data->hub_ref;
         return;
-    } else if (sv_data->state != gs_awaiting_players) {
+    } else if (r_data->state != gs_awaiting_players) {
         OUTBUF_POST(sess_l, "The game has already started! Try again later\r\n");
-        sess_l->interf->next_room = sv_data->hub_ref;
+        sess_l->interf->next_room = r_data->hub_ref;
         return;
     }
 
@@ -88,219 +88,219 @@ void fool_init_session_logic(session_logic_t *sess_l)
             "   any letter: play the card indexed by the letter (if you can play that card)\r\n"
             "   empty line: pass (if rules allow it right now)\r\n", 
             clrscr);
-    serv_l->sess_refs[serv_l->sess_cnt++] = sess_l;
+    s_room->sess_refs[s_room->sess_cnt++] = sess_l;
 
-    if (serv_l->sess_cnt == serv_l->sess_cap)
-        start_game(serv_l);        
+    if (s_room->sess_cnt == s_room->sess_cap)
+        start_game(s_room);        
 }
 
-static void end_game_with_message(server_logic_t *serv_l, const char *msg);
+static void end_game_with_message(server_room_t *s_room, const char *msg);
 
 void fool_deinit_session_logic(session_logic_t *sess_l)
 {
     fool_session_data_t *s_data = sess_l->data;
-    server_logic_t *serv_l = sess_l->serv;
-    fool_server_data_t *sv_data = serv_l->data;
+    server_room_t *s_room = sess_l->room;
+    fool_room_data_t *r_data = s_room->data;
 
     // If not reset, remove from player array and shift others
     bool offset = false;
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        if (serv_l->sess_refs[i] == sess_l) {
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        if (s_room->sess_refs[i] == sess_l) {
             offset = true;
 
-            if (sv_data->defender_index > i)
-                sv_data->defender_index--;
-            if (sv_data->attacker_index > i)
-                sv_data->attacker_index--;
+            if (r_data->defender_index > i)
+                r_data->defender_index--;
+            if (r_data->attacker_index > i)
+                r_data->attacker_index--;
         } else if (offset) {
-            serv_l->sess_refs[i-1] = serv_l->sess_refs[i];
-            serv_l->sess_refs[i] = NULL;
+            s_room->sess_refs[i-1] = s_room->sess_refs[i];
+            s_room->sess_refs[i] = NULL;
         }
     }
     if (offset) 
-        serv_l->sess_cnt--;
+        s_room->sess_cnt--;
 
     // If a live player has disconnected, end the game
     if (
-            (sv_data->state == gs_first_card || sv_data->state == gs_free_for_all) &&
+            (r_data->state == gs_first_card || r_data->state == gs_free_for_all) &&
             s_data->state != ps_spectating
        )
     {
-        end_game_with_message(serv_l,  
+        end_game_with_message(s_room,  
                 "\r\nA player has disconnected, thus the game can not continue. Press ENTER to exit\r\n");
     }
 
     // If last player quit, reset server
-    if (serv_l->sess_cnt == 0)
-        reset_server_logic(serv_l);
+    if (s_room->sess_cnt == 0)
+        reset_room(s_room);
 
     ll_free(s_data->hand);
     free(s_data);
     sess_l->data = NULL;
 }
 
-static int get_player_index(session_logic_t *sess_l, server_logic_t *serv_l);
-static void send_updates_to_player(server_logic_t *serv_l, int i);
+static int get_player_index(session_logic_t *sess_l, server_room_t *s_room);
+static void send_updates_to_player(server_room_t *s_room, int i);
 
-static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
-static void process_defender_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
-static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
-static void process_defender_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line);
+static void process_attacker_first_card(session_logic_t *sess_l, server_room_t *s_room, const char *line);
+static void process_defender_first_card(session_logic_t *sess_l, server_room_t *s_room, const char *line);
+static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_room_t *s_room, const char *line);
+static void process_defender_in_free_for_all(session_logic_t *sess_l, server_room_t *s_room, const char *line);
 
 void fool_process_line(session_logic_t *sess_l, const char *line)
 {
     fool_session_data_t *s_data = sess_l->data;
-    server_logic_t *serv_l = sess_l->serv;
-    fool_server_data_t *sv_data = serv_l->data;
+    server_room_t *s_room = sess_l->room;
+    fool_room_data_t *r_data = s_room->data;
 
-    if (streq(line, "quit") || sv_data->state == gs_game_end) {
-        sess_l->interf->next_room = sv_data->hub_ref;
+    if (streq(line, "quit") || r_data->state == gs_game_end) {
+        sess_l->interf->next_room = r_data->hub_ref;
         return;
     }
 
     // If waiting for game to start and somebody pressed ENTER, start
-    if (sv_data->state == gs_awaiting_players) {
-        if (serv_l->sess_cnt >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
-            start_game(serv_l);
+    if (r_data->state == gs_awaiting_players) {
+        if (s_room->sess_cnt >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
+            start_game(s_room);
         return;
     }
 
     if (sess_l->is_in_chat) {
         if (streq(line, "game")) {
             sess_l->is_in_chat = false;
-            send_updates_to_player(serv_l, get_player_index(sess_l, serv_l));
+            send_updates_to_player(s_room, get_player_index(sess_l, s_room));
         } else if (strlen(line) > 0) {
-            if (!chat_try_post_message(serv_l->chat, serv_l, sess_l, line))
+            if (!chat_try_post_message(s_room->chat, s_room, sess_l, line))
                 OUTBUF_POST(sess_l, "The message is too long!\r\n");
         }
         return;
     } else if (streq(line, "chat")) {
         sess_l->is_in_chat = true;
-        chat_send_updates(serv_l->chat, sess_l, "In-game chat\r\n\r\n");
+        chat_send_updates(s_room->chat, sess_l, "In-game chat\r\n\r\n");
         return;
     }
 
-    if (sv_data->state == gs_first_card && s_data->state == ps_defending)
-        process_defender_first_card(sess_l, serv_l, line);
-    else if (sv_data->state == gs_first_card && s_data->state == ps_attacking)
-        process_attacker_first_card(sess_l, serv_l, line);
-    else if (sv_data->state == gs_free_for_all && s_data->state == ps_defending)
-        process_defender_in_free_for_all(sess_l, serv_l, line);
-    else if (sv_data->state == gs_free_for_all && s_data->state == ps_attacking)
-        process_attacker_in_free_for_all(sess_l, serv_l, line);
+    if (r_data->state == gs_first_card && s_data->state == ps_defending)
+        process_defender_first_card(sess_l, s_room, line);
+    else if (r_data->state == gs_first_card && s_data->state == ps_attacking)
+        process_attacker_first_card(sess_l, s_room, line);
+    else if (r_data->state == gs_free_for_all && s_data->state == ps_defending)
+        process_defender_in_free_for_all(sess_l, s_room, line);
+    else if (r_data->state == gs_free_for_all && s_data->state == ps_attacking)
+        process_attacker_in_free_for_all(sess_l, s_room, line);
 }
 
-bool fool_server_is_available(server_logic_t *serv_l)
+bool fool_room_is_available(server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
-    return serv_l->sess_cnt < serv_l->sess_cap && sv_data->state == gs_awaiting_players;
+    fool_room_data_t *r_data = s_room->data;
+    return s_room->sess_cnt < s_room->sess_cap && r_data->state == gs_awaiting_players;
 }
 
-static void end_game_with_message(server_logic_t *serv_l, const char *msg)
+static void end_game_with_message(server_room_t *s_room, const char *msg)
 {
-    fool_server_data_t *sv_data = serv_l->data;
-    sv_data->state = gs_game_end;
+    fool_room_data_t *r_data = s_room->data;
+    r_data->state = gs_game_end;
 
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        session_logic_t *sess_l = serv_l->sess_refs[i]; 
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        session_logic_t *sess_l = s_room->sess_refs[i]; 
         if (sess_l && msg)
             OUTBUF_POSTF(sess_l, "%s%s", clrscr, msg);
     }
 }
 
-static void reset_server_logic(server_logic_t *serv_l)
+static void reset_room(server_room_t *s_room)
 {
-    for (int i = 0; i < serv_l->sess_cap; i++)
-        serv_l->sess_refs[i] = NULL;
+    for (int i = 0; i < s_room->sess_cap; i++)
+        s_room->sess_refs[i] = NULL;
 
-    serv_l->sess_cnt = 0;
+    s_room->sess_cnt = 0;
 
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    sv_data->num_active_players = 0;
+    r_data->num_active_players = 0;
 
-    sv_data->state = gs_awaiting_players;
-    sv_data->defender_index = 0;
-    sv_data->attacker_index = 0;
-    sv_data->attackers_left = 0;
+    r_data->state = gs_awaiting_players;
+    r_data->defender_index = 0;
+    r_data->attacker_index = 0;
+    r_data->attackers_left = 0;
 }
 
-static void send_updates_to_all_players(server_logic_t *serv_l);
+static void send_updates_to_all_players(server_room_t *s_room);
 
-static void replenish_hands(server_logic_t *serv_l);
-static void choose_first_turn(server_logic_t *serv_l);
+static void replenish_hands(server_room_t *s_room);
+static void choose_first_turn(server_room_t *s_room);
 
-static fool_session_data_t *data_at_index(server_logic_t *serv_l, int sess_idx);
+static fool_session_data_t *data_at_index(server_room_t *s_room, int sess_idx);
 
-static void start_game(server_logic_t *serv_l)
+static void start_game(server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    ASSERT(sv_data->state == gs_awaiting_players);
-    ASSERT(serv_l->sess_cnt >= MIN_PLAYERS_PER_GAME);
+    ASSERT(r_data->state == gs_awaiting_players);
+    ASSERT(s_room->sess_cnt >= MIN_PLAYERS_PER_GAME);
 
-    generate_deck(&sv_data->deck);
-    reset_table(&sv_data->table);
+    generate_deck(&r_data->deck);
+    reset_table(&r_data->table);
 
-    sv_data->state = gs_first_card;
-    sv_data->num_active_players = serv_l->sess_cnt;
+    r_data->state = gs_first_card;
+    r_data->num_active_players = s_room->sess_cnt;
 
-    replenish_hands(serv_l);
-    choose_first_turn(serv_l);
+    replenish_hands(s_room);
+    choose_first_turn(s_room);
 
-    send_updates_to_all_players(serv_l);
+    send_updates_to_all_players(s_room);
 }
 
-static void replenish_hands(server_logic_t *serv_l)
+static void replenish_hands(server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
-    ASSERT(sv_data->state == gs_first_card || sv_data->state == gs_free_for_all);
+    fool_room_data_t *r_data = s_room->data;
+    ASSERT(r_data->state == gs_first_card || r_data->state == gs_free_for_all);
 
-    int player_idx = sv_data->attacker_index;
+    int player_idx = r_data->attacker_index;
 
-    for (int i = 0; i < serv_l->sess_cnt; i++)
+    for (int i = 0; i < s_room->sess_cnt; i++)
     {
-        fool_session_data_t *s_data = data_at_index(serv_l, i);
+        fool_session_data_t *s_data = data_at_index(s_room, i);
 
         if (s_data->state == ps_spectating) {
-            inc_cycl(&player_idx, serv_l->sess_cnt);
+            inc_cycl(&player_idx, s_room->sess_cnt);
             continue;
         }
 
         while (s_data->hand->size < BASE_PLAYER_CARDS) {
-            card_t *card = pop_card_from_deck(&sv_data->deck);
+            card_t *card = pop_card_from_deck(&r_data->deck);
             if (!card)
                 goto loop_brk;
 
             ll_push_front(s_data->hand, card);
         }
 
-        inc_cycl(&player_idx, serv_l->sess_cnt);
+        inc_cycl(&player_idx, s_room->sess_cnt);
     }
 
 loop_brk:
     return;
 }
 
-static void choose_first_turn(server_logic_t *serv_l)
+static void choose_first_turn(server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
-    ASSERT(sv_data->state == gs_first_card);
+    fool_room_data_t *r_data = s_room->data;
+    ASSERT(r_data->state == gs_first_card);
 
     // Choose player with the lowest trump card
     int min_card_val = INT_MAX;
-    for (int i = 0; i < serv_l->sess_cnt; i++)
+    for (int i = 0; i < s_room->sess_cnt; i++)
     {
-        fool_session_data_t *s_data = data_at_index(serv_l, i);
+        fool_session_data_t *s_data = data_at_index(s_room, i);
         list_node_t *card_node = s_data->hand->head;
         while (card_node) {
             card_t *card = card_node->data;
             if (
-                    card->suit == sv_data->deck.trump.suit &&
+                    card->suit == r_data->deck.trump.suit &&
                     card->val < min_card_val
                ) 
             {
-                sv_data->attacker_index = i;
+                r_data->attacker_index = i;
                 min_card_val = card->val;
             }
 
@@ -308,26 +308,26 @@ static void choose_first_turn(server_logic_t *serv_l)
         }
     }
 
-    sv_data->defender_index = prev_cycl(sv_data->attacker_index, serv_l->sess_cnt);
+    r_data->defender_index = prev_cycl(r_data->attacker_index, s_room->sess_cnt);
 
-    data_at_index(serv_l, sv_data->defender_index)->state = ps_defending;
-    data_at_index(serv_l, sv_data->attacker_index)->state = ps_attacking;
-    sv_data->attackers_left = 1;
+    data_at_index(s_room, r_data->defender_index)->state = ps_defending;
+    data_at_index(s_room, r_data->attacker_index)->state = ps_attacking;
+    r_data->attackers_left = 1;
 }
 
 static void respond_to_invalid_command(session_logic_t *sess_l);
-static void switch_turn(server_logic_t *serv_l, bool defender_lost);
-static void enable_free_for_all(server_logic_t *serv_l);
+static void switch_turn(server_room_t *s_room, bool defender_lost);
+static void enable_free_for_all(server_room_t *s_room);
 static list_node_t *try_retrieve_card_from_hand(fool_session_data_t *s_data, const char *line);
 
-static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
+static void process_attacker_first_card(session_logic_t *sess_l, server_room_t *s_room, const char *line)
 {
     fool_session_data_t *s_data = sess_l->data;
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    ASSERT(sv_data->state == gs_first_card && s_data->state == ps_attacking);
+    ASSERT(r_data->state == gs_first_card && s_data->state == ps_attacking);
 
-    table_t *table = &sv_data->table;
+    table_t *table = &r_data->table;
 
     if (strlen(line) == 0) // Chosen attacker can not forfeit first round
         respond_to_invalid_command(sess_l);
@@ -338,45 +338,45 @@ static void process_attacker_first_card(session_logic_t *sess_l, server_logic_t 
         else if (attacker_try_play_card(table, card_node->data)) {
             ll_remove(s_data->hand, card_node);
             // Once the first attacker card is placed, it is free for all
-            enable_free_for_all(serv_l);
+            enable_free_for_all(s_room);
 
-            send_updates_to_all_players(serv_l);
+            send_updates_to_all_players(s_room);
         } else
             respond_to_invalid_command(sess_l);
     }
 }
 
-static void process_defender_first_card(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
+static void process_defender_first_card(session_logic_t *sess_l, server_room_t *s_room, const char *line)
 {
     fool_session_data_t *s_data = sess_l->data;
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    ASSERT(sv_data->state == gs_first_card && s_data->state == ps_defending);
+    ASSERT(r_data->state == gs_first_card && s_data->state == ps_defending);
 
     // No actions can be performed by defender before first card
     respond_to_invalid_command(sess_l);
 }
 
-static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
+static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_room_t *s_room, const char *line)
 {
     fool_session_data_t *s_data = sess_l->data;
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    ASSERT(sv_data->state == gs_free_for_all && s_data->state == ps_attacking);
+    ASSERT(r_data->state == gs_free_for_all && s_data->state == ps_attacking);
 
-    table_t *table = &sv_data->table;
-    linked_list_t *def_hand = data_at_index(serv_l, sv_data->defender_index)->hand;
+    table_t *table = &r_data->table;
+    linked_list_t *def_hand = data_at_index(s_room, r_data->defender_index)->hand;
 
     if (strlen(line) == 0) {
         s_data->state = ps_waiting;
 
         if (s_data->can_attack)
-            sv_data->attackers_left--;
-        if (sv_data->attackers_left == 0 && table_is_beaten(table))
-            switch_turn(serv_l, false);
+            r_data->attackers_left--;
+        if (r_data->attackers_left == 0 && table_is_beaten(table))
+            switch_turn(s_room, false);
 
-        if (sv_data->state != gs_game_end)
-            send_updates_to_all_players(serv_l);
+        if (r_data->state != gs_game_end)
+            send_updates_to_all_players(s_room);
     } else if (table_is_full(table, def_hand))
         respond_to_invalid_command(sess_l);
     else {
@@ -388,35 +388,35 @@ static void process_attacker_in_free_for_all(session_logic_t *sess_l, server_log
 
             if (!player_can_attack(table, s_data->hand)) {
                 s_data->can_attack = false;
-                sv_data->attackers_left--;
+                r_data->attackers_left--;
             }
 
-            if (sv_data->state != gs_game_end)
-                send_updates_to_all_players(serv_l);
+            if (r_data->state != gs_game_end)
+                send_updates_to_all_players(s_room);
         } else
             respond_to_invalid_command(sess_l);
     }
 }
 
-static void process_defender_in_free_for_all(session_logic_t *sess_l, server_logic_t *serv_l, const char *line)
+static void process_defender_in_free_for_all(session_logic_t *sess_l, server_room_t *s_room, const char *line)
 {
     fool_session_data_t *s_data = sess_l->data;
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    ASSERT(sv_data->state == gs_free_for_all && s_data->state == ps_defending);
+    ASSERT(r_data->state == gs_free_for_all && s_data->state == ps_defending);
 
-    table_t *table = &sv_data->table;
-    card_suit_t trump_suit = sv_data->deck.trump.suit;
-    linked_list_t *def_hand = data_at_index(serv_l, sv_data->defender_index)->hand;
+    table_t *table = &r_data->table;
+    card_suit_t trump_suit = r_data->deck.trump.suit;
+    linked_list_t *def_hand = data_at_index(s_room, r_data->defender_index)->hand;
 
     if (strlen(line) == 0) {
         // We assume table is not beaten, cause if it is and turn is not over, then attackers > 0 && table is not full
-        if (sv_data->attackers_left > 0 && !table_is_full(table, def_hand))
+        if (r_data->attackers_left > 0 && !table_is_full(table, def_hand))
             respond_to_invalid_command(sess_l); // Can't forfeit when waiting for cards from attackers
         else {
-            switch_turn(serv_l, true);
-            if (sv_data->state != gs_game_end)
-                send_updates_to_all_players(serv_l);
+            switch_turn(s_room, true);
+            if (r_data->state != gs_game_end)
+                send_updates_to_all_players(s_room);
         }
     } else if (table_is_beaten(table))
         respond_to_invalid_command(sess_l); // Cant defend at a beaten table
@@ -428,15 +428,15 @@ static void process_defender_in_free_for_all(session_logic_t *sess_l, server_log
             ll_remove(s_data->hand, card_node);
 
             if (table_is_full(table, def_hand) && table_is_beaten(table))
-                switch_turn(serv_l, false);
+                switch_turn(s_room, false);
             else { // Once the defender, attackers get a new chance to throw in
-                enable_free_for_all(serv_l);
-                if (sv_data->attackers_left == 0 && table_is_beaten(table))
-                    switch_turn(serv_l, false);
+                enable_free_for_all(s_room);
+                if (r_data->attackers_left == 0 && table_is_beaten(table))
+                    switch_turn(s_room, false);
             }
 
-            if (sv_data->state != gs_game_end)
-                send_updates_to_all_players(serv_l);
+            if (r_data->state != gs_game_end)
+                send_updates_to_all_players(s_room);
         } else
             respond_to_invalid_command(sess_l);
     }
@@ -444,28 +444,28 @@ static void process_defender_in_free_for_all(session_logic_t *sess_l, server_log
 
 static void sb_add_attacker_prompt(string_builder_t *sb,
                                    linked_list_t *hand,
-                                   server_logic_t *serv_l);
+                                   server_room_t *s_room);
 static void sb_add_defender_prompt(string_builder_t *sb,
                                    linked_list_t *hand,
-                                   server_logic_t *serv_l);
+                                   server_room_t *s_room);
 static void sb_add_card(string_builder_t *sb, card_t card);
 
 
-static void send_updates_to_all_players(server_logic_t *serv_l)
+static void send_updates_to_all_players(server_room_t *s_room)
 {
-    for (int i = 0; i < serv_l->sess_cnt; i++)
-        send_updates_to_player(serv_l, i);
+    for (int i = 0; i < s_room->sess_cnt; i++)
+        send_updates_to_player(s_room, i);
 }
 
-static void send_updates_to_player(server_logic_t *serv_l, int i)
+static void send_updates_to_player(server_room_t *s_room, int i)
 {
-    ASSERT(i >= 0 && i < serv_l->sess_cnt);
-    session_logic_t *sess_l = serv_l->sess_refs[i];
+    ASSERT(i >= 0 && i < s_room->sess_cnt);
+    session_logic_t *sess_l = s_room->sess_refs[i];
     
     if (sess_l->is_in_chat)
         return;
 
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
     fool_session_data_t *s_data = sess_l->data;
     string_builder_t *sb = sb_create();
 
@@ -473,16 +473,16 @@ static void send_updates_to_player(server_logic_t *serv_l, int i)
     sb_add_str(sb, clrscr);
 
     // Room name and list of players
-    sb_add_strf(sb, "Room: %s\r\n", serv_l->name);
+    sb_add_strf(sb, "Room: %s\r\n", s_room->name);
     sb_add_str(sb, "Players:");
 
-    int num_players = serv_l->sess_cnt;
+    int num_players = s_room->sess_cnt;
     int player_idx = i;
     for (dec_cycl(&player_idx, num_players); 
             player_idx != i;
             dec_cycl(&player_idx, num_players))
     {
-        sb_add_strf(sb, " %s", serv_l->sess_refs[player_idx]->username);
+        sb_add_strf(sb, " %s", s_room->sess_refs[player_idx]->username);
     }
     sb_add_str(sb, "\r\n\r\n");
 
@@ -494,18 +494,18 @@ static void send_updates_to_player(server_logic_t *serv_l, int i)
             player_idx != i;
             dec_cycl(&player_idx, num_players))
     {
-        fool_session_data_t *p_data = serv_l->sess_refs[player_idx]->data;
-        const char *fmt = player_idx == sv_data->defender_index ? "| %d |   " : "< %d >   ";
+        fool_session_data_t *p_data = s_room->sess_refs[player_idx]->data;
+        const char *fmt = player_idx == r_data->defender_index ? "| %d |   " : "< %d >   ";
         chars_used += sb_add_strf(sb, fmt, p_data->hand->size);
     }
 
     // Deck info: trump & remaining cards
     sb_add_strf(sb, "%*c", CHARS_TO_TRUMP - chars_used, ' ');
-    sb_add_card(sb, sv_data->deck.trump);
-    sb_add_strf(sb, "  [ %d ]\r\n", deck_size(&sv_data->deck));
+    sb_add_card(sb, r_data->deck.trump);
+    sb_add_strf(sb, "  [ %d ]\r\n", deck_size(&r_data->deck));
 
     // Table
-    table_t *table = &sv_data->table;
+    table_t *table = &r_data->table;
     if (table->cards_played > 0) {
         for (int i = 0; i < table->cards_played; i++) {
             card_t **faceoff = table->faceoffs[i];
@@ -537,9 +537,9 @@ static void send_updates_to_player(server_logic_t *serv_l, int i)
 
     // Prompts
     if (s_data->state == ps_attacking)
-        sb_add_attacker_prompt(sb, s_data->hand, serv_l);
+        sb_add_attacker_prompt(sb, s_data->hand, s_room);
     else if (s_data->state == ps_defending)
-        sb_add_defender_prompt(sb, s_data->hand, serv_l);
+        sb_add_defender_prompt(sb, s_data->hand, s_room);
 
     char *full_str = sb_build_string(sb);
     OUTBUF_POST(sess_l, full_str);
@@ -547,10 +547,10 @@ static void send_updates_to_player(server_logic_t *serv_l, int i)
     sb_free(sb);
 }
 
-static int get_player_index(session_logic_t *sess_l, server_logic_t *serv_l)
+static int get_player_index(session_logic_t *sess_l, server_room_t *s_room)
 {
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        if (sess_l == serv_l->sess_refs[i])
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        if (sess_l == s_room->sess_refs[i])
             return i;
     }
     return -1;
@@ -563,9 +563,9 @@ static void respond_to_invalid_command(session_logic_t *sess_l)
 
     fool_session_data_t *s_data = sess_l->data;
     if (s_data->state == ps_attacking)
-        sb_add_attacker_prompt(sb, s_data->hand, sess_l->serv);
+        sb_add_attacker_prompt(sb, s_data->hand, sess_l->room);
     else if (s_data->state == ps_defending)
-        sb_add_defender_prompt(sb, s_data->hand, sess_l->serv);
+        sb_add_defender_prompt(sb, s_data->hand, sess_l->room);
 
     char *full_str = sb_build_string(sb);
     OUTBUF_POST(sess_l, full_str);
@@ -575,13 +575,13 @@ static void respond_to_invalid_command(session_logic_t *sess_l)
 
 static void sb_add_attacker_prompt(string_builder_t *sb,
                                    linked_list_t *hand,
-                                   server_logic_t *serv_l)
+                                   server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    table_t *t = &sv_data->table;
+    table_t *t = &r_data->table;
     list_node_t *node = hand->head;
-    linked_list_t *def_hand = data_at_index(serv_l, sv_data->defender_index)->hand;
+    linked_list_t *def_hand = data_at_index(s_room, r_data->defender_index)->hand;
 
     if (!table_is_full(t, def_hand)) {
         for (int i = 0; i < hand->size; i++) {
@@ -597,12 +597,12 @@ static void sb_add_attacker_prompt(string_builder_t *sb,
 
 static void sb_add_defender_prompt(string_builder_t *sb,
                                    linked_list_t *hand,
-                                   server_logic_t *serv_l)
+                                   server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    table_t *t = &sv_data->table;
-    card_suit_t trump_suit = sv_data->deck.trump.suit;
+    table_t *t = &r_data->table;
+    card_suit_t trump_suit = r_data->deck.trump.suit;
     list_node_t *node = hand->head;
     if (!table_is_beaten(t)) {
         for (int i = 0; i < hand->size; i++) {
@@ -650,58 +650,58 @@ static void sb_add_card(string_builder_t *sb, card_t card)
         sb_add_strf(sb, "A%c", suit_c);
 }
 
-static void advance_turns(server_logic_t *serv_l, int num_turns);
-static void send_win_lose_messages_to_players(server_logic_t *serv_l);
-static void send_draw_messages_to_players(server_logic_t *serv_l);
-static void log_game_results(server_logic_t *serv_l);
+static void advance_turns(server_room_t *s_room, int num_turns);
+static void send_win_lose_messages_to_players(server_room_t *s_room);
+static void send_draw_messages_to_players(server_room_t *s_room);
+static void log_game_results(server_room_t *s_room);
 
-static void switch_turn(server_logic_t *serv_l, bool defender_lost)
+static void switch_turn(server_room_t *s_room, bool defender_lost)
 {
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    table_t *t = &sv_data->table;
-    linked_list_t *def_hand = data_at_index(serv_l, sv_data->defender_index)->hand;
+    table_t *t = &r_data->table;
+    linked_list_t *def_hand = data_at_index(s_room, r_data->defender_index)->hand;
 
     if (defender_lost)
         flush_table(t, def_hand);
     else
         reset_table(t);
 
-    replenish_hands(serv_l);
+    replenish_hands(s_room);
 
     // Game end check
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        fool_session_data_t *s_data = data_at_index(serv_l, i);
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        fool_session_data_t *s_data = data_at_index(s_room, i);
         if (s_data->state != ps_spectating && ll_is_empty(s_data->hand)) {
             s_data->state = ps_spectating;
-            sv_data->num_active_players--;
+            r_data->num_active_players--;
         }
     }
 
-    if (sv_data->num_active_players == 1) {
-        send_win_lose_messages_to_players(serv_l);
-        log_game_results(serv_l);
-        end_game_with_message(serv_l, NULL);
-    } else if (sv_data->num_active_players <= 0) {
-        send_draw_messages_to_players(serv_l);
-        log_game_results(serv_l);
-        end_game_with_message(serv_l, NULL);
+    if (r_data->num_active_players == 1) {
+        send_win_lose_messages_to_players(s_room);
+        log_game_results(s_room);
+        end_game_with_message(s_room, NULL);
+    } else if (r_data->num_active_players <= 0) {
+        send_draw_messages_to_players(s_room);
+        log_game_results(s_room);
+        end_game_with_message(s_room, NULL);
     } else {
-        sv_data->state = gs_first_card;
-        advance_turns(serv_l, defender_lost ? 2 : 1);
+        r_data->state = gs_first_card;
+        advance_turns(s_room, defender_lost ? 2 : 1);
     }
 }
 
-static void enable_free_for_all(server_logic_t *serv_l)
+static void enable_free_for_all(server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
+    fool_room_data_t *r_data = s_room->data;
 
-    sv_data->state = gs_free_for_all;
-    sv_data->attackers_left = 0;
+    r_data->state = gs_free_for_all;
+    r_data->attackers_left = 0;
 
-    table_t *table = &sv_data->table;
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        fool_session_data_t *s_data = data_at_index(serv_l, i);
+    table_t *table = &r_data->table;
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        fool_session_data_t *s_data = data_at_index(s_room, i);
         if (s_data->state == ps_waiting)
             s_data->state = ps_attacking;
 
@@ -709,7 +709,7 @@ static void enable_free_for_all(server_logic_t *serv_l)
         if (s_data->state == ps_attacking) {
             if (player_can_attack(table, s_data->hand)) {
                 s_data->can_attack = true;
-                sv_data->attackers_left++;
+                r_data->attackers_left++;
             } else 
                 s_data->can_attack = false;
         } 
@@ -728,42 +728,42 @@ static list_node_t *try_retrieve_card_from_hand(fool_session_data_t *s_data, con
     return ll_find_at(s_data->hand, card_int_index);
 }
 
-static void advance_turns(server_logic_t *serv_l, int num_turns)
+static void advance_turns(server_room_t *s_room, int num_turns)
 {
-    fool_server_data_t *sv_data = serv_l->data;
-    ASSERT(num_turns > 0 && sv_data->num_active_players > 1);
+    fool_room_data_t *r_data = s_room->data;
+    ASSERT(num_turns > 0 && r_data->num_active_players > 1);
 
     while (num_turns > 0) {
-        dec_cycl(&sv_data->attacker_index, serv_l->sess_cnt);
-        fool_session_data_t *a_data = data_at_index(serv_l, sv_data->attacker_index);
+        dec_cycl(&r_data->attacker_index, s_room->sess_cnt);
+        fool_session_data_t *a_data = data_at_index(s_room, r_data->attacker_index);
         if (a_data->state != ps_spectating)
             num_turns--;
     }
 
-    sv_data->defender_index = prev_cycl(sv_data->attacker_index, serv_l->sess_cnt);
-    fool_session_data_t *d_data = data_at_index(serv_l, sv_data->defender_index);
+    r_data->defender_index = prev_cycl(r_data->attacker_index, s_room->sess_cnt);
+    fool_session_data_t *d_data = data_at_index(s_room, r_data->defender_index);
     while (d_data->state == ps_spectating) {
-        dec_cycl(&sv_data->defender_index, serv_l->sess_cnt);
-        d_data = data_at_index(serv_l, sv_data->defender_index);
+        dec_cycl(&r_data->defender_index, s_room->sess_cnt);
+        d_data = data_at_index(s_room, r_data->defender_index);
     }
 
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        fool_session_data_t *s_data = data_at_index(serv_l, i);
-        if (i == sv_data->attacker_index)
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        fool_session_data_t *s_data = data_at_index(s_room, i);
+        if (i == r_data->attacker_index)
             s_data->state = ps_attacking;
-        else if (i == sv_data->defender_index)
+        else if (i == r_data->defender_index)
             s_data->state = ps_defending;
         else if (s_data->state != ps_spectating)
             s_data->state = ps_waiting;
     }
 
-    sv_data->attackers_left = 1;
+    r_data->attackers_left = 1;
 }
 
-static void send_win_lose_messages_to_players(server_logic_t *serv_l)
+static void send_win_lose_messages_to_players(server_room_t *s_room)
 {
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        session_logic_t *sess_l = serv_l->sess_refs[i];
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        session_logic_t *sess_l = s_room->sess_refs[i];
         fool_session_data_t *s_data = sess_l->data;
         if (s_data->state == ps_spectating)
             OUTBUF_POSTF(sess_l, "%sYou've won! Kinda. Press ENTER to exit\r\n", clrscr);
@@ -772,32 +772,32 @@ static void send_win_lose_messages_to_players(server_logic_t *serv_l)
     }
 }
 
-static void send_draw_messages_to_players(server_logic_t *serv_l)
+static void send_draw_messages_to_players(server_room_t *s_room)
 {
-    for (int i = 0; i < serv_l->sess_cnt; i++)
-        OUTBUF_POSTF(serv_l->sess_refs[i], "%sSeems that nobody is the fool today! What a pity. Press ENTER to exit\r\n", clrscr);
+    for (int i = 0; i < s_room->sess_cnt; i++)
+        OUTBUF_POSTF(s_room->sess_refs[i], "%sSeems that nobody is the fool today! What a pity. Press ENTER to exit\r\n", clrscr);
 }
 
-static void log_game_results(server_logic_t *serv_l)
+static void log_game_results(server_room_t *s_room)
 {
-    fool_server_data_t *sv_data = serv_l->data;
-    fprintf(serv_l->logs_file_handle, "FOOL: room %s, players(%d):", 
-            serv_l->name, serv_l->sess_cnt);
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        session_logic_t *sess_l = serv_l->sess_refs[i];
+    fool_room_data_t *r_data = s_room->data;
+    fprintf(s_room->logs_file_handle, "FOOL: room %s, players(%d):", 
+            s_room->name, s_room->sess_cnt);
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        session_logic_t *sess_l = s_room->sess_refs[i];
         fool_session_data_t *s_data = sess_l->data;
-        const char *status = sv_data->num_active_players == 0 ? "draw" :
+        const char *status = r_data->num_active_players == 0 ? "draw" :
                              (s_data->state == ps_spectating ? "won" : "lost");
                             
-        fprintf(serv_l->logs_file_handle, " %s(%s)", sess_l->username, status);
+        fprintf(s_room->logs_file_handle, " %s(%s)", sess_l->username, status);
     }
-    fputc('\n', serv_l->logs_file_handle);
-    fflush(serv_l->logs_file_handle);
+    fputc('\n', s_room->logs_file_handle);
+    fflush(s_room->logs_file_handle);
 }
 
 
-static fool_session_data_t *data_at_index(server_logic_t *serv_l, int sess_idx)
+static fool_session_data_t *data_at_index(server_room_t *s_room, int sess_idx)
 {
-    ASSERT(sess_idx >= 0 && sess_idx < serv_l->sess_cnt);
-    return serv_l->sess_refs[sess_idx]->data;
+    ASSERT(sess_idx >= 0 && sess_idx < s_room->sess_cnt);
+    return s_room->sess_refs[sess_idx]->data;
 }

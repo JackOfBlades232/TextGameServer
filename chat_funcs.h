@@ -7,7 +7,7 @@
 
 chat_t *make_chat();
 void destroy_chat(chat_t *c);
-bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
+bool chat_try_post_message(chat_t *c, server_room_t *s_room,
                            session_logic_t *author_sl, const char *msg);
 void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header);
 

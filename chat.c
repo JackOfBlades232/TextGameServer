@@ -31,7 +31,7 @@ void destroy_chat(chat_t *c)
     free(c);
 }
 
-bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
+bool chat_try_post_message(chat_t *c, server_room_t *s_room,
                            session_logic_t *author_sl, const char *msg)
 {
     ASSERT(author_sl->is_in_chat);
@@ -48,8 +48,8 @@ bool chat_try_post_message(chat_t *c, server_logic_t *serv_l,
 
     inc_cycl(&c->tail, CHAT_MSG_HISTORY_SIZE);
 
-    for (int i = 0; i < serv_l->sess_cnt; i++) {
-        session_logic_t *sess_l = serv_l->sess_refs[i];
+    for (int i = 0; i < s_room->sess_cnt; i++) {
+        session_logic_t *sess_l = s_room->sess_refs[i];
         if (sess_l->is_in_chat && sess_l != author_sl)
             OUTBUF_POSTF(sess_l, "%s: %s\r\n", author_sl->username, msg);
     }
