@@ -541,9 +541,7 @@ static void send_updates_to_player(server_room_t *s_room, int i)
     else if (rs_data->state == ps_defending)
         sb_add_defender_prompt(sb, rs_data->hand, s_room);
 
-    char *full_str = sb_build_string(sb);
-    OUTBUF_POST(r_sess, full_str);
-    free(full_str);
+    OUTBUF_POST_SB(r_sess, sb);
     sb_free(sb);
 }
 
@@ -567,9 +565,7 @@ static void respond_to_invalid_command(room_session_t *r_sess)
     else if (rs_data->state == ps_defending)
         sb_add_defender_prompt(sb, rs_data->hand, r_sess->room);
 
-    char *full_str = sb_build_string(sb);
-    OUTBUF_POST(r_sess, full_str);
-    free(full_str);
+    OUTBUF_POST_SB(r_sess, sb);
     sb_free(sb);
 }
 

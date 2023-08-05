@@ -80,8 +80,6 @@ void chat_send_updates(chat_t *c, room_session_t *r_sess, const char *header)
         inc_cycl(&msg_idx, CHAT_MSG_HISTORY_SIZE);
     }
 
-    char *full_str = sb_build_string(sb);
-    OUTBUF_POST(r_sess, full_str);
-    free(full_str);
+    OUTBUF_POST_SB(r_sess, sb);
     sb_free(sb);
 }

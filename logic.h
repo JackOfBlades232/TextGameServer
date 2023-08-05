@@ -92,6 +92,12 @@ static inline bool room_is_available(server_room_t *s_room)
     _r_sess->interf->out_buf_len = sprintf(_r_sess->interf->out_buf, _fmt, ##__VA_ARGS__); \
 } while (0)
 
+#define OUTBUF_POST_SB(_r_sess, _sb) do { \
+    if (_r_sess->interf->out_buf) free(_r_sess->interf->out_buf); \
+    _r_sess->interf->out_buf = sb_build_string(_sb); \
+    _r_sess->interf->out_buf_len = strlen(_r_sess->interf->out_buf); \
+} while (0)
+
 extern char clrscr[];
 
 extern room_preset_t hub_preset;

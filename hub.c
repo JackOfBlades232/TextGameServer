@@ -306,9 +306,7 @@ static void send_rooms_list(room_session_t *r_sess, server_room_t *s_room)
     }
     sb_add_str(sb, "\r\n");
 
-    char *full_str = sb_build_string(sb);
-    OUTBUF_POST(r_sess, full_str);
-    free(full_str);
+    OUTBUF_POST_SB(r_sess, sb);
     sb_free(sb);
 }
 

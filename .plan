@@ -4,13 +4,10 @@
 
 = Multi-session fool game =
     * Create simple multisessioning (once one has started, create new) (trouble -- how to connect multiple logics?)
-    - Create hub
-    - Create in-game modifications
-    - Create statistic remembrance (games played, games won)
-
-- Test thoroughly and check for mem leaks
+    * Create hub
+    * Create in-game modifications
+    * Create game-res logs file
 
 = Implement another text game & make server multi-game =
-    - Create a riddles game
-        (one player sends riddle and answers, the other one guesses)
+    - Create a sudoku game
     - Rewire main server so as to be able to choose between games
