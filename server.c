@@ -14,8 +14,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: really do something about the naming (the logics, rooms and shit are confusing)
-
 // Phase 2
 // @TODO: riddles game
 // @TODO: games list & create choice in hub
@@ -34,8 +32,8 @@ typedef struct session_tag {
     char buf[INBUFSIZE];
     int buf_used;
 
-    session_interface_t l_interf;
-    session_logic_t *logic;
+    session_interface_t interf;
+    room_session_t *rs;
     char *username;
 } session;
 
@@ -59,21 +57,21 @@ session *make_session(int fd, server_room_t *room)
     sess->fd = fd;
     sess->buf_used = 0;
 
-    sess->l_interf.out_buf = NULL;
-    sess->l_interf.out_buf_len = 0;
-    sess->l_interf.next_room = NULL;
-    sess->l_interf.need_to_register_username = false;
-    sess->l_interf.quit = false;
+    sess->interf.out_buf = NULL;
+    sess->interf.out_buf_len = 0;
+    sess->interf.next_room = NULL;
+    sess->interf.need_to_register_username = false;
+    sess->interf.quit = false;
 
     sess->username = NULL;
-    sess->logic = make_session_logic(room, &sess->l_interf, sess->username);
+    sess->rs = make_room_session(room, &sess->interf, sess->username);
     return sess;
 }
 
 void cleanup_session(session *sess)
 {
-    if (sess->l_interf.out_buf) free(sess->l_interf.out_buf);
-    if (sess->logic) destroy_session_logic(sess->logic);
+    if (sess->interf.out_buf) free(sess->interf.out_buf);
+    if (sess->rs) destroy_room_session(sess->rs);
     if (sess->username) free(sess->username);
 }
 
@@ -98,14 +96,14 @@ void session_check_lf(session *sess)
     if (line[pos-1] == '\r')
         line[pos-1] = '\0';
 
-    session_logic_process_line(sess->logic, line);
+    room_session_process_line(sess->rs, line);
     free(line);
 }
 
 bool session_do_read(session *sess)
 {
     // If waiting to send data or marked for change room/quit, skip turn
-    if (sess->l_interf.out_buf || sess->l_interf.next_room || sess->l_interf.quit)
+    if (sess->interf.out_buf || sess->interf.next_room || sess->interf.quit)
         return true;
 
     int rc, bufp = sess->buf_used;
@@ -118,23 +116,23 @@ bool session_do_read(session *sess)
 
     // If session logic set quit to true, still perform the write if need be
     if (sess->buf_used == INBUFSIZE)
-        session_logic_process_too_long_line(sess->logic);
+        room_session_process_too_long_line(sess->rs);
 
     return true;
 }
 
 bool session_do_write(session *sess)
 {
-    ASSERT(sess->l_interf.out_buf && sess->l_interf.out_buf_len > 0);
+    ASSERT(sess->interf.out_buf && sess->interf.out_buf_len > 0);
 
     // @NOTE for robustness it might be good to implement cutting the out_buf
     // up, but actual message sizes do not require this
     int wc = write(sess->fd, 
-                   sess->l_interf.out_buf, 
-                   sess->l_interf.out_buf_len);
-    free(sess->l_interf.out_buf);
-    sess->l_interf.out_buf = NULL;
-    sess->l_interf.out_buf_len = 0;
+                   sess->interf.out_buf, 
+                   sess->interf.out_buf_len);
+    free(sess->interf.out_buf);
+    sess->interf.out_buf = NULL;
+    sess->interf.out_buf_len = 0;
 
     if (wc <= 0) // Disconnected
         return false;
@@ -144,11 +142,11 @@ bool session_do_write(session *sess)
 
 void switch_session_room(server *serv, session *sess)
 {
-    ASSERT(sess->l_interf.next_room);
+    ASSERT(sess->interf.next_room);
 
-    destroy_session_logic(sess->logic);
-    sess->logic = make_session_logic(sess->l_interf.next_room, &sess->l_interf, sess->username);
-    sess->l_interf.next_room = NULL;
+    destroy_room_session(sess->rs);
+    sess->rs = make_room_session(sess->interf.next_room, &sess->interf, sess->username);
+    sess->interf.next_room = NULL;
 }
 
 void server_init(server *serv, int port)
@@ -257,7 +255,7 @@ int main(int argc, char **argv)
             session *sess = serv.sessions[i];
             if (sess) {
                 FD_SET(i, &readfds);
-                if (sess->l_interf.out_buf)
+                if (sess->interf.out_buf)
                     FD_SET(i, &writefds);
                 if (i > maxfd)
                     maxfd = i;
@@ -278,20 +276,20 @@ int main(int argc, char **argv)
                         // Try write queued data, close if disconnected
                         (FD_ISSET(i, &writefds) && !session_do_write(sess)) ||
                         // If logic says "quit" and all data is sent, also close
-                        (sess->l_interf.quit && !sess->l_interf.out_buf)
+                        (sess->interf.quit && !sess->interf.out_buf)
                    ) 
                 {
                     server_close_session(&serv, i);
                     continue;
                 }  
 
-                if (sess->l_interf.need_to_register_username) {
-                    sess->username = sess->logic->username;
-                    serv.logged_in_usernames.data[i] = sess->logic->username;
-                    sess->l_interf.need_to_register_username = false;
+                if (sess->interf.need_to_register_username) {
+                    sess->username = sess->rs->username;
+                    serv.logged_in_usernames.data[i] = sess->rs->username;
+                    sess->interf.need_to_register_username = false;
                 } 
 
-                if (sess->l_interf.next_room && !sess->l_interf.quit && !sess->l_interf.out_buf) 
+                if (sess->interf.next_room && !sess->interf.quit && !sess->interf.out_buf) 
                     switch_session_room(&serv, sess);
             }
         }

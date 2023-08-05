@@ -17,8 +17,8 @@ room_preset_t hub_preset = {
 
     .init_room_f          = &hub_init_room,
     .deinit_room_f        = &hub_deinit_room,
-    .init_sess_f          = &hub_init_session_logic,
-    .deinit_sess_f        = &hub_deinit_session_logic,
+    .init_sess_f          = &hub_init_room_session,
+    .deinit_sess_f        = &hub_deinit_room_session,
     .process_line_f       = &hub_process_line,
     .room_is_available_f  = &hub_is_available
 };
@@ -28,14 +28,14 @@ room_preset_t fool_preset = {
 
     .init_room_f          = &fool_init_room,
     .deinit_room_f        = &fool_deinit_room,
-    .init_sess_f          = &fool_init_session_logic,
-    .deinit_sess_f        = &fool_deinit_session_logic,
+    .init_sess_f          = &fool_init_room_session,
+    .deinit_sess_f        = &fool_deinit_room_session,
     .process_line_f       = &fool_process_line,
     .room_is_available_f  = &fool_room_is_available
 };
 
 server_room_t *make_room(room_preset_t *preset, const char *id, 
-                                 FILE *logs_file_handle, void *payload)
+                         FILE *logs_file_handle, void *payload)
 {
     server_room_t *s_room = malloc(sizeof(*s_room));
     s_room->preset = preset;
@@ -61,38 +61,38 @@ void destroy_room(server_room_t *s_room)
     free(s_room);
 }
 
-session_logic_t *make_session_logic(server_room_t *s_room,
-                                    session_interface_t *interf,
-                                    char *username)
+room_session_t *make_room_session(server_room_t *s_room,
+                                  session_interface_t *interf,
+                                  char *username)
 {
     ASSERT(s_room);
     ASSERT(interf);
 
-    session_logic_t *sess_l = malloc(sizeof(*sess_l));
-    sess_l->room = s_room;
-    sess_l->interf = interf;
-    sess_l->username = username;
-    sess_l->is_in_chat = false;
-    (*s_room->preset->init_sess_f)(sess_l);
+    room_session_t *r_sess = malloc(sizeof(*r_sess));
+    r_sess->room = s_room;
+    r_sess->interf = interf;
+    r_sess->username = username;
+    r_sess->is_in_chat = false;
+    (*s_room->preset->init_sess_f)(r_sess);
 
-    return sess_l;
+    return r_sess;
 }
 
-void destroy_session_logic(session_logic_t *sess_l)
+void destroy_room_session(room_session_t *r_sess)
 {
-    ASSERT(sess_l);
-    (*sess_l->room->preset->deinit_sess_f)(sess_l);
-    free(sess_l);
+    ASSERT(r_sess);
+    (*r_sess->room->preset->deinit_sess_f)(r_sess);
+    free(r_sess);
 }
 
-void session_logic_process_line(session_logic_t *sess_l, const char *line)
+void room_session_process_line(room_session_t *r_sess, const char *line)
 {
-    (*sess_l->room->preset->process_line_f)(sess_l, line);
+    (*r_sess->room->preset->process_line_f)(r_sess, line);
 }
 
 // This reaction will be mutual for all logics
-void session_logic_process_too_long_line(session_logic_t *sess_l)
+void room_session_process_too_long_line(room_session_t *r_sess)
 {
-    OUTBUF_POST(sess_l, "ERR: Line was too long\r\n");
-    sess_l->interf->quit = true;
+    OUTBUF_POST(r_sess, "ERR: Line was too long\r\n");
+    r_sess->interf->quit = true;
 }

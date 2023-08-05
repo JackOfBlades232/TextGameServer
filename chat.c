@@ -32,7 +32,7 @@ void destroy_chat(chat_t *c)
 }
 
 bool chat_try_post_message(chat_t *c, server_room_t *s_room,
-                           session_logic_t *author_sl, const char *msg)
+                           room_session_t *author_sl, const char *msg)
 {
     ASSERT(author_sl->is_in_chat);
 
@@ -49,17 +49,17 @@ bool chat_try_post_message(chat_t *c, server_room_t *s_room,
     inc_cycl(&c->tail, CHAT_MSG_HISTORY_SIZE);
 
     for (int i = 0; i < s_room->sess_cnt; i++) {
-        session_logic_t *sess_l = s_room->sess_refs[i];
-        if (sess_l->is_in_chat && sess_l != author_sl)
-            OUTBUF_POSTF(sess_l, "%s: %s\r\n", author_sl->username, msg);
+        room_session_t *r_sess = s_room->sess_refs[i];
+        if (r_sess->is_in_chat && r_sess != author_sl)
+            OUTBUF_POSTF(r_sess, "%s: %s\r\n", author_sl->username, msg);
     }
 
     return true;
 }
 
-void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
+void chat_send_updates(chat_t *c, room_session_t *r_sess, const char *header)
 {
-    ASSERT(sess_l->is_in_chat);
+    ASSERT(r_sess->is_in_chat);
 
     string_builder_t *sb = sb_create();
     sb_add_str(sb, clrscr);
@@ -72,8 +72,8 @@ void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
         if (!msg->used)
             break;
 
-        if (streq(sess_l->username, msg->username))
-            sb_add_strf(sb, "You: %s\r\n", msg->content);
+        if (streq(r_sess->username, msg->username))
+            sb_add_strf(sb, "%s\r\n", msg->content);
         else
             sb_add_strf(sb, "%s: %s\r\n", msg->username, msg->content);
 
@@ -81,7 +81,7 @@ void chat_send_updates(chat_t *c, session_logic_t *sess_l, const char *header)
     }
 
     char *full_str = sb_build_string(sb);
-    OUTBUF_POST(sess_l, full_str);
+    OUTBUF_POST(r_sess, full_str);
     free(full_str);
     sb_free(sb);
 }
