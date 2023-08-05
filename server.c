@@ -129,7 +129,8 @@ bool session_do_write(session *sess)
 {
     ASSERT(sess->l_interf.out_buf && sess->l_interf.out_buf_len > 0);
 
-    // @TODO: Implement cutting up?
+    // @NOTE for robustness it might be good to implement cutting the out_buf
+    // up, but actual message sizes do not require this
     int wc = write(sess->fd, 
                    sess->l_interf.out_buf, 
                    sess->l_interf.out_buf_len);

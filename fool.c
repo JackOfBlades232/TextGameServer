@@ -80,7 +80,7 @@ void fool_init_session_logic(session_logic_t *sess_l)
 
     OUTBUF_POSTF(sess_l,
             "%sWelcome to the game of FOOL! "
-            "Once there is one more player, you can press ENTER to start the game", 
+            "Once there is one more player, you can press ENTER to start the game\r\n", 
             clrscr);
     serv_l->sess_refs[serv_l->sess_cnt++] = sess_l;
 
@@ -117,7 +117,7 @@ void fool_deinit_session_logic(session_logic_t *sess_l)
     // If a live player has disconnected, end the game
     if (
             (sv_data->state == gs_first_card || sv_data->state == gs_free_for_all) &&
-            s_data->state != ps_spectating && !sess_l->interf->quit && !sess_l->interf->next_room
+            s_data->state != ps_spectating
        )
     {
         end_game_with_message(serv_l,  
@@ -147,13 +147,15 @@ void fool_process_line(session_logic_t *sess_l, const char *line)
     server_logic_t *serv_l = sess_l->serv;
     fool_server_data_t *sv_data = serv_l->data;
 
+    if (streq(line, "quit") || sv_data->state == gs_game_end) {
+        sess_l->interf->next_room = sv_data->hub_ref;
+        return;
+    }
+
     // If waiting for game to start and somebody pressed ENTER, start
     if (sv_data->state == gs_awaiting_players) {
         if (serv_l->sess_cnt >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
             start_game(serv_l);
-        return;
-    } else if (sv_data->state == gs_game_end) { // If game ended, quit on ENTER
-        sess_l->interf->next_room = sv_data->hub_ref;
         return;
     }
 

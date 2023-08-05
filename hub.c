@@ -13,8 +13,6 @@
 
 #define CREDENTIAL_MAX_LEN      64
 
-// @TODO: refac
-
 typedef enum hub_user_state_tag {
     hs_input_username,
     hs_input_passwd,
@@ -130,7 +128,6 @@ static void send_rooms_list(session_logic_t *sess_l, server_logic_t *serv_l);
 static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l);
 static void try_join_existing_room(session_logic_t *sess_l, hub_server_data_t *sv_data, const char *room_name);
 
-// @TODO: refac?
 void hub_process_line(session_logic_t *sess_l, const char *line)
 {
     hub_session_data_t *s_data = sess_l->data;
@@ -163,7 +160,6 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     break;
                 }
                 if (streq(s_data->expected_password, line)) {
-                    // @TODO: add more helpful greeting
                     sess_l->is_in_chat = true;
                     chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
 
@@ -185,7 +181,6 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                     break;
                 }
                 if (add_user(sv_data, sess_l->username, line)) {
-                    // @TODO: factor out
                     sess_l->is_in_chat = true;
                     chat_send_updates(serv_l->chat, sess_l, "Welcome to the global chat!\r\n\r\n");
 
@@ -207,7 +202,6 @@ void hub_process_line(session_logic_t *sess_l, const char *line)
                 else if (strncmp(line, "join ", 5) == 0)
                     try_join_existing_room(sess_l, sv_data, line+5);
                 else if (strlen(line) > 0) {
-                    // @TODO: refac
                     if (!chat_try_post_message(serv_l->chat, serv_l, sess_l, line))
                         OUTBUF_POST(sess_l, "The message is too long!\r\n");
                 }
@@ -333,13 +327,9 @@ static void create_and_join_room(session_logic_t *sess_l, server_logic_t *serv_l
             for (int j = sv_data->rooms_size; j < newsize; j++)
                 sv_data->rooms[j] = NULL;
             sv_data->rooms_size = newsize;
+        } 
 
-            // @TODO: factor out?
-            sprintf(id, "%d", i);
-            room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, &payload);
-            sv_data->rooms[i] = room;
-            break;
-        } else if (!sv_data->rooms[i]) {
+        if (!sv_data->rooms[i]) {
             sprintf(id, "%d", i);
             room = make_server_logic(&fool_preset, id, serv_l->logs_file_handle, &payload);
             sv_data->rooms[i] = room;
