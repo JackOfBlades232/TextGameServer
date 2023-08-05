@@ -6,6 +6,7 @@
 #include "fool_data_structures.c"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <limits.h>
 
 typedef struct fool_session_data_tag {
@@ -57,7 +58,6 @@ void fool_init_session_logic(session_logic_t *sess_l)
 {
     sess_l->data = malloc(sizeof(fool_session_data_t));
 
-    // @TODO: factor out datas caching into a macro?
     fool_session_data_t *s_data = sess_l->data;
     server_logic_t *serv_l = sess_l->serv;
     fool_server_data_t *sv_data = serv_l->data;
@@ -96,35 +96,36 @@ void fool_deinit_session_logic(session_logic_t *sess_l)
     fool_server_data_t *sv_data = serv_l->data;
 
     // If not reset, remove from player array and shift others
-    if (serv_l->sess_cnt > 0) {
-        bool offset = false;
-        for (int i = 0; i < serv_l->sess_cnt; i++) {
-            if (serv_l->sess_refs[i] == sess_l) {
-                offset = true;
+    bool offset = false;
+    for (int i = 0; i < serv_l->sess_cnt; i++) {
+        if (serv_l->sess_refs[i] == sess_l) {
+            offset = true;
 
-                if (sv_data->defender_index > i)
-                    sv_data->defender_index--;
-                if (sv_data->attacker_index > i)
-                    sv_data->attacker_index--;
-            } else if (offset) {
-                serv_l->sess_refs[i-1] = serv_l->sess_refs[i];
-                serv_l->sess_refs[i] = NULL;
-            }
+            if (sv_data->defender_index > i)
+                sv_data->defender_index--;
+            if (sv_data->attacker_index > i)
+                sv_data->attacker_index--;
+        } else if (offset) {
+            serv_l->sess_refs[i-1] = serv_l->sess_refs[i];
+            serv_l->sess_refs[i] = NULL;
         }
-        if (offset) 
-            serv_l->sess_cnt--;
     }
+    if (offset) 
+        serv_l->sess_cnt--;
 
     // If a live player has disconnected, end the game
-    // @HUH: why is the !quit condition here? seems to work
     if (
             (sv_data->state == gs_first_card || sv_data->state == gs_free_for_all) &&
             s_data->state != ps_spectating && !sess_l->interf->quit && !sess_l->interf->next_room
        )
     {
         end_game_with_message(serv_l,  
-                "\r\nA player has disconnected, thus the game can not continue. Goodbye!\r\n");
+                "\r\nA player has disconnected, thus the game can not continue. Press ENTER to exit\r\n");
     }
+
+    // If last player quit, reset server
+    if (serv_l->sess_cnt == 0)
+        reset_server_logic(serv_l);
 
     ll_free(s_data->hand);
     free(s_data);
@@ -150,15 +151,16 @@ void fool_process_line(session_logic_t *sess_l, const char *line)
         if (serv_l->sess_cnt >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
             start_game(serv_l);
         return;
-    } else if (sv_data->state == gs_game_end)
+    } else if (sv_data->state == gs_game_end) { // If game ended, quit on ENTER
+        sess_l->interf->next_room = sv_data->hub_ref;
         return;
+    }
 
     if (sess_l->is_in_chat) {
         if (streq(line, "game")) {
             sess_l->is_in_chat = false;
             send_updates_to_player(serv_l, get_player_index(sess_l, serv_l));
         } else if (strlen(line) > 0) {
-            // @TODO: refac
             if (!chat_try_post_message(serv_l->chat, serv_l, sess_l, line))
                 OUTBUF_POST(sess_l, "The message is too long!\r\n");
         }
@@ -187,22 +189,14 @@ bool fool_server_is_available(server_logic_t *serv_l)
 
 static void end_game_with_message(server_logic_t *serv_l, const char *msg)
 {
-    // @TODO: add some possible delay before disconnecting all players
-    //      (may just sleep the thread lol)
-    // @HACK: the sess_cnt gets reset to 0 before the disconnections happen,
-    //      so i had to hack this in deinit_session_logic. There might be a
-    //      better solution
     fool_server_data_t *sv_data = serv_l->data;
+    sv_data->state = gs_game_end;
+
     for (int i = 0; i < serv_l->sess_cnt; i++) {
         session_logic_t *sess_l = serv_l->sess_refs[i]; 
-        if (sess_l) {
-            if (msg)
-                OUTBUF_POSTF(sess_l, "%s%s", clrscr, msg);
-            sess_l->interf->next_room = sv_data->hub_ref;
-        }
+        if (sess_l && msg)
+            OUTBUF_POSTF(sess_l, "%s%s", clrscr, msg);
     }
-
-    reset_server_logic(serv_l);
 }
 
 static void reset_server_logic(server_logic_t *serv_l)
@@ -676,12 +670,10 @@ static void switch_turn(server_logic_t *serv_l, bool defender_lost)
     }
 
     if (sv_data->num_active_players == 1) {
-        sv_data->state = gs_game_end;
         send_win_lose_messages_to_players(serv_l);
         log_game_results(serv_l);
         end_game_with_message(serv_l, NULL);
     } else if (sv_data->num_active_players <= 0) {
-        sv_data->state = gs_game_end;
         send_draw_messages_to_players(serv_l);
         log_game_results(serv_l);
         end_game_with_message(serv_l, NULL);
@@ -765,16 +757,16 @@ static void send_win_lose_messages_to_players(server_logic_t *serv_l)
         session_logic_t *sess_l = serv_l->sess_refs[i];
         fool_session_data_t *s_data = sess_l->data;
         if (s_data->state == ps_spectating)
-            OUTBUF_POSTF(sess_l, "%sYou've won! Kinda\r\n", clrscr);
+            OUTBUF_POSTF(sess_l, "%sYou've won! Kinda. Press ENTER to exit\r\n", clrscr);
         else
-            OUTBUF_POSTF(sess_l, "%sYou're the fool! Oopsy-daisy)\r\n", clrscr);
+            OUTBUF_POSTF(sess_l, "%sYou're the fool! Oopsy-daisy) Press ENTER to exit\r\n", clrscr);
     }
 }
 
 static void send_draw_messages_to_players(server_logic_t *serv_l)
 {
     for (int i = 0; i < serv_l->sess_cnt; i++)
-        OUTBUF_POSTF(serv_l->sess_refs[i], "%sSeems that nobody is the fool today! What a pity\r\n", clrscr);
+        OUTBUF_POSTF(serv_l->sess_refs[i], "%sSeems that nobody is the fool today! What a pity. Press ENTER to exit\r\n", clrscr);
 }
 
 static void log_game_results(server_logic_t *serv_l)
