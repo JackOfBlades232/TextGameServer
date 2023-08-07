@@ -19,6 +19,17 @@ typedef struct sudoku_cell_tag {
 
 typedef sudoku_cell_t sudoku_board_t[SUDOKU_BOARD_SIZE][SUDOKU_BOARD_SIZE];
 
+typedef enum player_state_tag {
+    ps_waiting,
+    ps_acting
+} player_state_t;
+
+typedef enum game_state_tag {
+    gs_awaiting_players,
+    gs_in_progress,
+    gs_game_end     
+} game_state_t;
+
 static bool try_put_number(sudoku_board_t *board, int number, int x, int y)
 {
     ASSERT(number >= 1 && number <= SUDOKU_BOARD_SIZE);
