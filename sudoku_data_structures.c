@@ -20,7 +20,8 @@ typedef struct sudoku_cell_tag {
 typedef sudoku_cell_t sudoku_board_t[SUDOKU_BOARD_SIZE][SUDOKU_BOARD_SIZE];
 
 typedef enum player_state_tag {
-    ps_waiting,
+    ps_lobby,
+    ps_idle,
     ps_acting
 } player_state_t;
 

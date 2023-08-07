@@ -160,7 +160,7 @@ void fool_process_line(room_session_t *r_sess, const char *line)
 
     // If waiting for game to start and somebody pressed ENTER, start
     if (r_data->state == gs_awaiting_players) {
-        if (s_room->sess_cnt >= MIN_PLAYERS_PER_GAME && strlen(line) == 0)
+        if (s_room->sess_cnt >= MIN_PLAYERS_PER_GAME)
             start_game(s_room);
         return;
     }
@@ -474,7 +474,7 @@ static void send_updates_to_player(server_room_t *s_room, int i)
 
     // Room name and list of players
     sb_add_strf(sb, "Room: %s\r\n", s_room->name);
-    sb_add_str(sb, "Players:");
+    sb_add_str(sb, "Other players:");
 
     int num_players = s_room->sess_cnt;
     int player_idx = i;

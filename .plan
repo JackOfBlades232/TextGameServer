@@ -9,5 +9,5 @@
     * Create game-res logs file
 
 = Implement another text game & make server multi-game =
+    * Rewire main server so as to be able to choose between games
     - Create a sudoku game
-    - Rewire main server so as to be able to choose between games

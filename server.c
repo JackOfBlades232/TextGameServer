@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "utils.h"
 #include "logic.h"
+#include "room_presets.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,12 +16,14 @@
 #include <netinet/in.h>
 
 // Phase 2
-// @TODO: riddles game
-// @TODO: games list & create choice in hub
+// @TODO: sudoku gameplay
+// @TODO: sudoku board generation
+// @TODO: sudoku result logging
 
 // @TODO: implement variation with threads (one thread deals with a subset of containers) OPTIONAL?
 //      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
 // @TODO: implement normal quit on ^C and daemonization
+// @TODO: factor out common stuff from sudoku and fool
 
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32

@@ -2,8 +2,6 @@
 #include "logic.h"
 #include "utils.h"
 #include "chat_funcs.h"
-#include "hub.h"
-#include "fool.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,29 +10,7 @@ char clrscr[] = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
                 "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
                 "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
 
-room_preset_t hub_preset = {
-    .name                 = "",
-
-    .init_room_f          = &hub_init_room,
-    .deinit_room_f        = &hub_deinit_room,
-    .init_sess_f          = &hub_init_room_session,
-    .deinit_sess_f        = &hub_deinit_room_session,
-    .process_line_f       = &hub_process_line,
-    .room_is_available_f  = &hub_is_available
-};
-
-room_preset_t fool_preset = {
-    .name                 = "fool",
-
-    .init_room_f          = &fool_init_room,
-    .deinit_room_f        = &fool_deinit_room,
-    .init_sess_f          = &fool_init_room_session,
-    .deinit_sess_f        = &fool_deinit_room_session,
-    .process_line_f       = &fool_process_line,
-    .room_is_available_f  = &fool_room_is_available
-};
-
-server_room_t *make_room(room_preset_t *preset, const char *id, 
+server_room_t *make_room(const room_preset_t *preset, const char *id, 
                          FILE *logs_file_handle, void *payload)
 {
     server_room_t *s_room = malloc(sizeof(*s_room));

@@ -10,7 +10,7 @@ typedef struct room_preset_tag room_preset_t;
 typedef struct room_session_tag room_session_t;
 
 typedef struct server_room_tag {
-    room_preset_t *preset;
+    const room_preset_t *preset;
 
     char *name;
     room_session_t **sess_refs;
@@ -61,7 +61,7 @@ struct room_session_tag {
     void *data;
 };
 
-server_room_t *make_room(room_preset_t *preset, const char *id, 
+server_room_t *make_room(const room_preset_t *preset, const char *id, 
                          FILE *logs_file_handle, void *payload);
 void destroy_room(server_room_t *s_room);
 room_session_t *make_room_session(server_room_t *s_room,
@@ -99,9 +99,6 @@ static inline bool room_is_available(server_room_t *s_room)
 } while (0)
 
 extern char clrscr[];
-
-extern room_preset_t hub_preset;
-extern room_preset_t fool_preset;
 
 typedef struct hub_payload_tag {
     sized_array_t *logged_in_usernames;

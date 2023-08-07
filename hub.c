@@ -1,6 +1,7 @@
 /* TextGameServer/hub.c */
 #include "hub.h"
 #include "logic.h"
+#include "room_presets.h"
 #include "chat_funcs.h"
 #include "utils.h"
 #include <stdio.h>
@@ -36,8 +37,9 @@ typedef struct hub_session_data_tag {
 static const char global_chat_greeting[] = 
         "Welcome to the global chat!\r\n"
         "Commands:\r\n"
-        "   <list>: list all current rooms\r\n"
-        "   <create>: create a new room\r\n"
+        "   <listg>: list all supported games\r\n"
+        "   <listr>: list all current rooms\r\n"
+        "   <create *game name*>: create a new room\r\n"
         "   <join *room name*>: join a room\r\n"
         "   anything else: send message to char\r\n\r\n";
 
@@ -136,8 +138,9 @@ static bool user_already_logged_in(hub_room_data_t *r_data, const char *usernm);
 static char *lookup_username_and_get_password(hub_room_data_t *r_data, const char *usernm);
 static bool add_user(hub_room_data_t *r_data, const char *usernm, const char *passwd);
 
+static void send_games_list(room_session_t *r_sess);
 static void send_rooms_list(room_session_t *r_sess, server_room_t *s_room);
-static void create_and_join_room(room_session_t *r_sess, server_room_t *s_room);
+static void create_and_join_room(room_session_t *r_sess, server_room_t *s_room, const char *game_name);
 static void try_join_existing_room(room_session_t *r_sess, hub_room_data_t *r_data, const char *room_name);
 
 void hub_process_line(room_session_t *r_sess, const char *line)
@@ -201,10 +204,12 @@ void hub_process_line(room_session_t *r_sess, const char *line)
         case hs_global_chat:
             {
                 ASSERT(r_sess->is_in_chat);
-                if (streq(line, "list"))
+                if (streq(line, "listg"))
+                    send_games_list(r_sess); 
+                else if (streq(line, "listr"))
                     send_rooms_list(r_sess, s_room); 
-                else if (streq(line, "create"))
-                    create_and_join_room(r_sess, s_room);
+                else if (strncmp(line, "create ", 7) == 0)
+                    create_and_join_room(r_sess, s_room, line+7);
                 else if (strncmp(line, "join ", 5) == 0)
                     try_join_existing_room(r_sess, r_data, line+5);
                 else if (strlen(line) > 0) {
@@ -292,6 +297,18 @@ static bool add_user(hub_room_data_t *r_data, const char *usernm, const char *pa
         return false;
 }
 
+static void send_games_list(room_session_t *r_sess)
+{
+    string_builder_t *sb = sb_create();
+    sb_add_strf(sb, "\r\nAvailable games:\r\n", MAX_ROOMS_ARR_SIZE);
+    for (int i = 0; i < NUM_GAMES; i++)
+        sb_add_strf(sb, "   %s\r\n", game_presets[i].name);
+    sb_add_str(sb, "\r\n");
+
+    OUTBUF_POST_SB(r_sess, sb);
+    sb_free(sb);
+}
+
 static void send_rooms_list(room_session_t *r_sess, server_room_t *s_room)
 {
     hub_room_data_t *r_data = s_room->data;
@@ -310,10 +327,23 @@ static void send_rooms_list(room_session_t *r_sess, server_room_t *s_room)
     sb_free(sb);
 }
 
-static void create_and_join_room(room_session_t *r_sess, server_room_t *s_room)
+static void create_and_join_room(room_session_t *r_sess, server_room_t *s_room, const char *game_name)
 {
     hub_room_data_t *r_data = s_room->data;
     game_payload_t payload = { .hub_ref = s_room };
+
+    const room_preset_t *preset = NULL;
+    for (int i = 0; i < NUM_GAMES; i++) {
+        if (streq(game_name, game_presets[i].name)) {
+            preset = &game_presets[i];
+            break;
+        }
+    }
+
+    if (!preset) {
+        OUTBUF_POST(r_sess, "This server does not host such a game! Suma\r\n");
+        return;
+    }
 
     server_room_t *room = NULL;
     for (int i = 0; i <= r_data->rooms_size; i++) {
@@ -335,7 +365,7 @@ static void create_and_join_room(room_session_t *r_sess, server_room_t *s_room)
 
         if (!r_data->rooms[i]) {
             sprintf(id, "%d", i);
-            room = make_room(&fool_preset, id, s_room->logs_file_handle, &payload);
+            room = make_room(preset, id, s_room->logs_file_handle, &payload);
             r_data->rooms[i] = room;
             break;
         } else if (r_data->rooms[i]->sess_cnt <= 0) {
