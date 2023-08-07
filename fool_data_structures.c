@@ -103,14 +103,7 @@ static void generate_deck(deck_t *d)
         d->cards[i].val = (i / NUM_SUITS) + cv_two;
     }
 
-    // Fisher-Yates random permutation
-    for (int i = 0; i < DECK_SIZE-1; i++) {
-        int xchg_idx = randint(i, DECK_SIZE-1);
-
-        card_t tmp = d->cards[i];
-        d->cards[i] = d->cards[xchg_idx];
-        d->cards[xchg_idx] = tmp;
-    }
+    DO_RANDOM_PERMUTATION(card_t, d->cards, DECK_SIZE);
 
     d->head = &d->cards[DECK_SIZE-1];
     d->trump = d->cards[0];

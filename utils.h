@@ -58,4 +58,12 @@ static inline int randint(int min, int max)
     return min + (int) ((float) (max-min+1) * rand() / (RAND_MAX+1.0));
 }
 
+#define DO_RANDOM_PERMUTATION(_type, _arr, _arr_size) \
+    for (int i = 0; i < _arr_size-1; i++) { \
+        int xchg_idx = randint(i, _arr_size-1); \
+        _type tmp = _arr[i]; \
+        _arr[i] = _arr[xchg_idx]; \
+        _arr[xchg_idx] = tmp; \
+    }
+
 #endif
