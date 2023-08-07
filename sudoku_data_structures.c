@@ -5,9 +5,12 @@
 #define SUDOKU_BOARD_BLOCKS 3
 #define SUDOKU_BOARD_SIZE   SUDOKU_BLOCK_SIZE*SUDOKU_BOARD_BLOCKS
 
+/*
 #define MIN_EMPTY 24
-//#define MAX_EMPTY 57
-#define MAX_EMPTY 25
+#define MAX_EMPTY 57
+*/
+#define MIN_EMPTY 3
+#define MAX_EMPTY 3
 
 // @NOTE: in this model any player can remove any non-intial cell, which may
 //      lead to stalling. I could replace is_initial with author field.

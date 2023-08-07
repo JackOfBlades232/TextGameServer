@@ -32,9 +32,9 @@ void destroy_chat(chat_t *c)
 }
 
 bool chat_try_post_message(chat_t *c, server_room_t *s_room,
-                           room_session_t *author_sl, const char *msg)
+                           room_session_t *author_rs, const char *msg)
 {
-    ASSERT(author_sl->is_in_chat);
+    ASSERT(author_rs->is_in_chat);
 
     if (strlen(msg) > MAX_CHAT_MSG_LEN)
         return false;
@@ -42,7 +42,7 @@ bool chat_try_post_message(chat_t *c, server_room_t *s_room,
     if (c->history[c->head].used && c->tail == c->head)
         inc_cycl(&c->head, CHAT_MSG_HISTORY_SIZE);
 
-    c->history[c->tail].username = strdup(author_sl->username);
+    c->history[c->tail].username = strdup(author_rs->username);
     c->history[c->tail].content = strdup(msg);
     c->history[c->tail].used = true;
 
@@ -50,8 +50,8 @@ bool chat_try_post_message(chat_t *c, server_room_t *s_room,
 
     for (int i = 0; i < s_room->sess_cnt; i++) {
         room_session_t *r_sess = s_room->sess_refs[i];
-        if (r_sess->is_in_chat && r_sess != author_sl)
-            OUTBUF_POSTF(r_sess, "%s: %s\r\n", author_sl->username, msg);
+        if (r_sess->is_in_chat && r_sess != author_rs)
+            OUTBUF_POSTF(r_sess, "%s: %s\r\n", author_rs->username, msg);
     }
 
     return true;

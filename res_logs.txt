@@ -4,3 +4,4 @@ FOOL: room fool0, players(2): q(won) 1(lost)
 FOOL: room fool0, players(2): q(lost) w(won)
 FOOL: room fool0, players(2): q(lost) w(won)
 FOOL: room fool0, players(2): hhf232(lost) 1(won)
+SUDOKU: solved, room sudoku0, players(2): 1 q

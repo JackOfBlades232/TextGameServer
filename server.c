@@ -16,14 +16,12 @@
 #include <netinet/in.h>
 
 // Phase 2
-// @TODO: sudoku gameplay
 // @TODO: sudoku board generation
-// @TODO: sudoku result logging
 
-// @TODO: implement variation with threads (one thread deals with a subset of containers) OPTIONAL?
-//      @NOTE: for thread cotainer separations I will need enum type for games (make it equal to func table list index?)
 // @TODO: implement normal quit on ^C and daemonization
 // @TODO: factor out common stuff from sudoku and fool
+// @TODO: Add "show tutor" command which shows the player to commands text until he presses enter
+// @TODO: implement variation with threads (one thread deals with a subset of containers) OPTIONAL?
 
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32
