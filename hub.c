@@ -150,6 +150,8 @@ void hub_process_line(room_session_t *r_sess, const char *line)
     server_room_t *s_room = r_sess->room;
     hub_room_data_t *r_data = s_room->data;
 
+    // @TODO: ignore/refuse empty messages
+
     switch (rs_data->state) {
         case hs_input_username:
             {
