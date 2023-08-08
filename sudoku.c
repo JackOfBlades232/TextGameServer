@@ -173,9 +173,9 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
         int number;
         if (
                 sscanf(line, "%lc%d %d", &col, &row, &number) != 3 ||
-                col < 'A' || col > 'A' + SUDOKU_BOARD_SIZE - 1 ||
-                row < 0 || row > SUDOKU_BOARD_SIZE-1 ||
-                number < 1 || number > SUDOKU_BOARD_SIZE
+                col < 'A' || col > 'A' + BOARD_SIZE - 1 ||
+                row < 0 || row > BOARD_SIZE-1 ||
+                number < 1 || number > BOARD_SIZE
            ) 
         {
             respond_to_invalid_command(r_sess);
@@ -189,8 +189,8 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
     } else if (strncmp(line, "rm ", 3) == 0) {
         if (
                 sscanf(line+3, "%lc%d", &col, &row) != 2 ||
-                col < 'A' || col > 'A' + SUDOKU_BOARD_SIZE - 1 ||
-                row < 0 || row > SUDOKU_BOARD_SIZE-1
+                col < 'A' || col > 'A' + BOARD_SIZE - 1 ||
+                row < 0 || row > BOARD_SIZE-1
            )
         {
             respond_to_invalid_command(r_sess);
@@ -318,7 +318,7 @@ static void send_updates_to_player(server_room_t *s_room, int i)
 
     sb_add_num_header(sb);
     sb_add_line_sep(sb);
-    for (int y = 0; y < SUDOKU_BOARD_SIZE; y++) {
+    for (int y = 0; y < BOARD_SIZE; y++) {
         sb_add_line(sb, &r_data->board, y);
         sb_add_line_sep(sb);
     }
@@ -335,7 +335,7 @@ static void send_updates_to_player(server_room_t *s_room, int i)
 static void sb_add_num_header(string_builder_t *sb)
 {
     sb_add_str(sb, "   ");
-    for (int x = 0; x < SUDOKU_BOARD_SIZE; x++)
+    for (int x = 0; x < BOARD_SIZE; x++)
         sb_add_strf(sb, " %d  ", x);
     sb_add_str(sb, "\r\n");
 }
@@ -343,7 +343,7 @@ static void sb_add_num_header(string_builder_t *sb)
 static void sb_add_line_sep(string_builder_t *sb)
 {
     sb_add_str(sb, "  +");
-    for (int x = 0; x < SUDOKU_BOARD_SIZE; x++)
+    for (int x = 0; x < BOARD_SIZE; x++)
         sb_add_str(sb, "---+");
     sb_add_str(sb, "\r\n");
 }
@@ -351,7 +351,7 @@ static void sb_add_line_sep(string_builder_t *sb)
 static void sb_add_line(string_builder_t *sb, sudoku_board_t *board, int y)
 {
     sb_add_strf(sb, "%c +", 'A'+y);
-    for (int x = 0; x < SUDOKU_BOARD_SIZE; x++) {
+    for (int x = 0; x < BOARD_SIZE; x++) {
         sudoku_cell_t cell = (*board)[y][x];
         if (cell.val)
             sb_add_strf(sb, " %d%c|", cell.val, cell.is_initial ? ' ' : '\'');
