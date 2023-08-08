@@ -41,6 +41,7 @@ static const char global_chat_greeting[] =
         "   <listr>: list all current rooms\r\n"
         "   <create *game name*>: create a new room\r\n"
         "   <join *room name*>: join a room\r\n"
+        "   <quit>: disconnect from server\r\n"
         "   anything else: send message to char\r\n\r\n";
 
 static bool passwd_file_is_correct(hub_room_data_t *r_data);
@@ -204,7 +205,10 @@ void hub_process_line(room_session_t *r_sess, const char *line)
         case hs_global_chat:
             {
                 ASSERT(r_sess->is_in_chat);
-                if (streq(line, "listg"))
+
+                if (streq(line, "quit"))
+                    r_sess->interf->quit = true;
+                else if (streq(line, "listg"))
                     send_games_list(r_sess); 
                 else if (streq(line, "listr"))
                     send_rooms_list(r_sess, s_room); 

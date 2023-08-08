@@ -17,11 +17,12 @@
 
 // Phase 2
 // @TODO: sudoku board generation
+// @TODO: make sudoku board generation run in a separate thread 
+//      (generate in batches and yield a row-col-num-block permutation on demand)
 
 // @TODO: implement normal quit on ^C and daemonization
 // @TODO: factor out common stuff from sudoku and fool
 // @TODO: Add "show tutor" command which shows the player to commands text until he presses enter
-// @TODO: implement variation with threads (one thread deals with a subset of containers) OPTIONAL?
 
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32

@@ -1,19 +1,18 @@
 /* TextGameServer/sudoku_data_structures.c */
 #include "utils.h"
+#include "defs.h"
+#include <string.h>
 
 #define SUDOKU_BLOCK_SIZE   3
 #define SUDOKU_BOARD_BLOCKS 3
 #define SUDOKU_BOARD_SIZE   SUDOKU_BLOCK_SIZE*SUDOKU_BOARD_BLOCKS
 
-/*
 #define MIN_EMPTY 24
 #define MAX_EMPTY 57
-*/
+/*
 #define MIN_EMPTY 3
 #define MAX_EMPTY 3
-
-// @NOTE: in this model any player can remove any non-intial cell, which may
-//      lead to stalling. I could replace is_initial with author field.
+*/
 
 typedef struct sudoku_cell_tag {
     int val;
@@ -76,42 +75,32 @@ static bool try_remove_number(sudoku_board_t *board, int x, int y)
     return true;
 }
 
-// @TEST
-static const int board_example[SUDOKU_BOARD_SIZE][SUDOKU_BOARD_SIZE] = {
-    { 4, 3, 5, 2, 6, 9, 7, 8, 1 },
-    { 6, 8, 2, 5, 7, 1, 4, 9, 3 },
-    { 1, 9, 7, 8, 3, 4, 5, 6, 2 },
-    { 8, 2, 6, 1, 9, 5, 3, 4, 7 },
-    { 3, 7, 4, 6, 8, 2, 9, 1, 5 },
-    { 9, 5, 1, 7, 4, 3, 6, 2, 8 },
-    { 5, 1, 9, 3, 2, 6, 8, 7, 4 },
-    { 2, 4, 8, 9, 5, 7, 1, 3, 6 },
-    { 7, 6, 3, 4, 1, 8, 2, 5, 9 }
-};
-
 static void generate_board(sudoku_board_t *board)
 {
-    // @TODO: implement a proper board generation algo
+    memset(*board, 0, sizeof(*board));
 
-    // @TEST
-    for (int y = 0; y < SUDOKU_BOARD_SIZE; y++)
-        for (int x = 0; x < SUDOKU_BOARD_SIZE; x++) {
-            (*board)[y][x].val = board_example[y][x];
-            (*board)[y][x].is_initial = true;
+    // First, fill all diagonal blocks as an optimization
+    int numbers[SUDOKU_BOARD_SIZE];
+
+    for (int i = 0; i < SUDOKU_BOARD_BLOCKS; i++) {
+        for (int i = 0; i < SUDOKU_BOARD_SIZE; i++)
+            numbers[i] = i+1;
+        DO_RANDOM_PERMUTATION(int, numbers, SUDOKU_BOARD_SIZE);
+
+        int bx = SUDOKU_BLOCK_SIZE*i;
+        int by = bx;
+        for (int j = 0; j < SUDOKU_BOARD_SIZE; j++) {
+            int y = by+(j/SUDOKU_BLOCK_SIZE);
+            int x = bx+(j%SUDOKU_BLOCK_SIZE);
+            sudoku_cell_t *cell = &((*board)[y][x]);
+
+            cell->val = numbers[j];
+            cell->is_initial = true;
         }
-
-    // @TODO: implement removal with unique solution
-
-    // @TEST
-    int k = randint(MIN_EMPTY, MAX_EMPTY);
-    for (int i = 0; i < k; i++) {
-        int x, y;
-        do {
-            x = randint(0, SUDOKU_BOARD_SIZE-1);
-            y = randint(0, SUDOKU_BOARD_SIZE-1);
-        } while ((*board)[y][x].val == 0);
-        (*board)[y][x].val = 0;
     }
+
+    // @TODO: implement a proper board generation algo
+    // @TODO: implement removal with unique solution
 }
 
 static bool board_is_solved(sudoku_board_t *board)

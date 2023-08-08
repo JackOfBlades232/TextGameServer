@@ -168,7 +168,6 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
         return;
     }
 
-    // @TODO: refac
     int col, row;
     if (strlen(line) == 4) {
         int number;
@@ -288,7 +287,6 @@ static void sb_add_num_header(string_builder_t *sb);
 static void sb_add_line_sep(string_builder_t *sb);
 static void sb_add_line(string_builder_t *sb, sudoku_board_t *board, int y);
 
-// @TODO: add a sign that a number can be removed
 static void send_updates_to_player(server_room_t *s_room, int i)
 {
     ASSERT(i >= 0 && i < s_room->sess_cnt);
@@ -354,9 +352,9 @@ static void sb_add_line(string_builder_t *sb, sudoku_board_t *board, int y)
 {
     sb_add_strf(sb, "%c +", 'A'+y);
     for (int x = 0; x < SUDOKU_BOARD_SIZE; x++) {
-        int num = (*board)[y][x].val;
-        if (num)
-            sb_add_strf(sb, " %d |", num);
+        sudoku_cell_t cell = (*board)[y][x];
+        if (cell.val)
+            sb_add_strf(sb, " %d%c|", cell.val, cell.is_initial ? ' ' : '\'');
         else
             sb_add_str(sb, "   |");
     }

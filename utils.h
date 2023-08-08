@@ -59,11 +59,11 @@ static inline int randint(int min, int max)
 }
 
 #define DO_RANDOM_PERMUTATION(_type, _arr, _arr_size) \
-    for (int i = 0; i < _arr_size-1; i++) { \
-        int xchg_idx = randint(i, _arr_size-1); \
-        _type tmp = _arr[i]; \
-        _arr[i] = _arr[xchg_idx]; \
-        _arr[xchg_idx] = tmp; \
+    for (int _i = 0; _i < _arr_size-1; _i++) { \
+        int _xchg_idx = randint(_i, _arr_size-1); \
+        _type _tmp = _arr[_i]; \
+        _arr[_i] = _arr[_xchg_idx]; \
+        _arr[_xchg_idx] = _tmp; \
     }
 
 #endif
