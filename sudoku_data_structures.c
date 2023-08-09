@@ -12,12 +12,7 @@
 
 #define MIN_EMPTY 48
 #define MAX_EMPTY 64
-/*
-#define MIN_EMPTY 3
-#define MAX_EMPTY 3
-*/
 
-// @TODO: implement removal with unique solution
 // @TODO: test and refac full board generation
 
 typedef struct sudoku_cell_tag {
@@ -81,7 +76,18 @@ static bool try_remove_number(sudoku_board_t *board, int x, int y)
     return true;
 }
 
-static bool fill_board(sudoku_board_t *board);
+static bool board_is_solved(sudoku_board_t *board)
+{
+    for (int y = 0; y < BOARD_SIZE; y++)
+        for (int x = 0; x < BOARD_SIZE; x++) {
+            if ((*board)[y][x].val == 0)
+                return false;
+        }
+
+    return true;
+}
+
+static void fill_board(sudoku_board_t *board);
 static void remove_board_elements(sudoku_board_t *board);
 
 static void generate_board(sudoku_board_t *board)
@@ -90,7 +96,6 @@ static void generate_board(sudoku_board_t *board)
 
     // First, fill all diagonal blocks as an optimization
     int numbers[BOARD_SIZE];
-
     for (int i = 0; i < BOARD_SIZE; i++)
         numbers[i] = i+1;
     for (int i = 0; i < BOARD_BLOCKS; i++) {
@@ -111,6 +116,8 @@ static void generate_board(sudoku_board_t *board)
     // Then, we fill board and remove elements to obtain a unique solution
     fill_board(board);
     remove_board_elements(board);
+
+    // @TODO: apply random row-col-block and number permutation
 }
 
 typedef struct coord_tag {
@@ -124,45 +131,16 @@ typedef struct solution_cell_data_tag {
 
 typedef solution_cell_data_t solution_board_state_t[BOARD_SIZE][BOARD_SIZE];
 
-// @TODO: move down
-static int add_num_to_cell_data(solution_cell_data_t *cd, int num)
-{
-    int i;
-    for (i = 0; i < cd->num_opts; i++) {
-        if (cd->options[i] == num)
-            return cd->num_opts;
-    }
+static int add_num_to_cell_data(solution_cell_data_t *cd, int num);
+static int remove_num_from_cell_data(solution_cell_data_t *cd, int num);
 
-    ASSERT(i < BOARD_SIZE);
-
-    cd->options[cd->num_opts++] = num;
-    return cd->num_opts-1;
-}
-
-static int remove_num_from_cell_data(solution_cell_data_t *cd, int num)
-{
-    int i;
-    for (i = 0; i < cd->num_opts; i++) {
-        if (cd->options[i] == num)
-            break;
-    }
-
-    if (i == cd->num_opts)
-        return cd->num_opts;
-
-    for (i++; i < cd->num_opts; i++)
-        cd->options[i-1] = cd->options[i];
-    cd->num_opts--;
-
-    return cd->num_opts+1;
-}
 #define DEBUG_PRINT_BOARD(_board) \
     for (int _y = 0; _y < BOARD_SIZE; _y++) { \
         for (int _x = 0; _x < BOARD_SIZE; _x++) { \
             printf("%d%c ", _board[_y][_x].val, _board[_y][_x].is_initial ? ' ' : '\''); \
         } \
         printf("\n"); \
-    } \
+    }
 
 #define DEBUG_PRINT_BSTATE(_bstate) \
     for (int _y = 0; _y < BOARD_SIZE; _y++) { \
@@ -177,68 +155,21 @@ static int remove_num_from_cell_data(solution_cell_data_t *cd, int num)
             printf(" "); \
         } \
         printf("\n"); \
-    } \
-
-static bool assign_and_eliminate_options(solution_board_state_t *board,
-                                         int x, int y, int opt_idx)
-{
-    solution_cell_data_t *cd = &(*board)[y][x];
-    int chosen_num = cd->options[opt_idx];
-    int bx = x - x%BLOCK_SIZE;
-    int by = y - y%BLOCK_SIZE;
-
-    cd->options[0] = chosen_num;
-    cd->num_opts = 1;
-
-    // @HACK: using that BOARD_SIZE = BLOCK_SIZE**2
-    for (int c = 0; c < BOARD_SIZE; c++) {
-        if (c != x) {
-            solution_cell_data_t *other_cd = &(*board)[y][c];
-            int prev_num_opts = remove_num_from_cell_data(other_cd, chosen_num);
-            if (other_cd->num_opts <= 0)
-                return false;
-            else if (prev_num_opts > 1 && other_cd->num_opts == 1) {
-                bool prop_res = assign_and_eliminate_options(board, c, y, 0);
-                if (!prop_res)
-                    return false;
-            }
-        }
-        if (c != y) {
-            solution_cell_data_t *other_cd = &(*board)[c][x];
-            int prev_num_opts = remove_num_from_cell_data(other_cd, chosen_num);
-            if (other_cd->num_opts <= 0)
-                return false;
-            else if (prev_num_opts > 1 && other_cd->num_opts == 1) {
-                bool prop_res = assign_and_eliminate_options(board, x, c, 0);
-                if (!prop_res)
-                    return false;
-            }
-        }
-
-        int bcy = by + c/BLOCK_SIZE;
-        int bcx = bx + c%BLOCK_SIZE;
-        if (bcx != x && bcy != y) {
-            solution_cell_data_t *other_cd = &(*board)[bcy][bcx];
-            int prev_num_opts = remove_num_from_cell_data(other_cd, chosen_num);
-            if (other_cd->num_opts <= 0)
-                return false;
-            else if (prev_num_opts > 1 && other_cd->num_opts == 1) {
-                bool prop_res = assign_and_eliminate_options(board, bcx, bcy, 0);
-                if (!prop_res)
-                return false;
-            }
-        }
     }
 
-    return true;
-}
+static bool assign_and_eliminate_options(solution_board_state_t *board,
+                                         int x, int y, int opt_idx);
 
-static bool fill_board(sudoku_board_t *board)
+// Non-recursive backtracking algorithm that finds some solution of given
+// board (with 3 diagonal blocks already filled). This algorithm randomizes
+// the cell order and the possible variants in each cell in order to produce
+// different boards every time
+static void fill_board(sudoku_board_t *board)
 {
     coord_t cell_stack[NON_MAIN_ELEM_CNT] = { 0 };
-    // @TODO: extend board state to possible numbers info/chosen index
     solution_board_state_t board_state_stack[NON_MAIN_ELEM_CNT+1] = { 0 };
 
+    // Create stack for cells to try solutions for (in random order)
     int i = 0;
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
@@ -251,6 +182,7 @@ static bool fill_board(sudoku_board_t *board)
         }
     DO_RANDOM_PERMUTATION(coord_t, cell_stack, NON_MAIN_ELEM_CNT);
 
+    // Fill initial state: set all chosen numbers to have one option (itself)
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
             if ((*board)[y][x].val) {
@@ -259,6 +191,9 @@ static bool fill_board(sudoku_board_t *board)
                 cd->num_opts = 1;
             }
         }
+    // Fill initial state: calculate possible numbers for every other cell
+    // (and write them in random order, since the algo will be checking them
+    // in linear order)
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
             if ((*board)[y][x].val == 0) {
@@ -282,6 +217,16 @@ static bool fill_board(sudoku_board_t *board)
             }
         }
 
+    // The backtracking algo:
+    // 1. Take the next cell off the stack, and prepare the next board state
+    //      by copying the previous one
+    // 2. Try to assign numbers to the cell from it's list of possible numbers.
+    //      When assigning, try to modify the possible number lists of other
+    //      cells. If one of them becomes empty, the assignment fails. If some
+    //      of them become singular, we propagate the assignment for them.
+    // 3. If successfully assigned a value, inc the stack to process next number
+    // 4. Otherwise (if number list became empty), roll back the stack by one,
+    //      and try the next number for the previous cell (thus it is a dfs)
     int stack_top = 0;
     while (stack_top < NON_MAIN_ELEM_CNT) {
         solution_board_state_t *prev_sol = &board_state_stack[stack_top];
@@ -315,17 +260,62 @@ static bool fill_board(sudoku_board_t *board)
         }
     }
 
-    /*
-    putchar('\n');
-    DEBUG_PRINT_BSTATE(board_state_stack[stack_top]);
-    */
-
+    // Finally, copy the final solution to the board
     solution_board_state_t *fin_sol = &board_state_stack[stack_top];
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
             (*board)[y][x].val = (*fin_sol)[y][x].options[0];
             (*board)[y][x].is_initial = true;
         }
+
+    putchar('\n');
+    putchar('\n');
+    DEBUG_PRINT_BSTATE(board_state_stack[stack_top]);
+}
+
+static inline bool try_remove_num_and_propagate_elim(
+        solution_board_state_t *bs, int x, int y, int number)
+{
+    solution_cell_data_t *cd = &(*bs)[y][x];
+    int prev_num_opts = remove_num_from_cell_data(cd, number);
+    if (cd->num_opts <= 0)
+        return false;
+    if (prev_num_opts > 1 && cd->num_opts == 1)
+        return assign_and_eliminate_options(bs, x, y, 0);
+    return true;
+}
+
+static bool assign_and_eliminate_options(solution_board_state_t *bs,
+                                         int x, int y, int opt_idx)
+{
+    solution_cell_data_t *cd = &(*bs)[y][x];
+    int chosen_num = cd->options[opt_idx];
+    int bx = x - x%BLOCK_SIZE;
+    int by = y - y%BLOCK_SIZE;
+
+    cd->options[0] = chosen_num;
+    cd->num_opts = 1;
+
+    // @HACK: using that BOARD_SIZE = BLOCK_SIZE**2, thus regarding c to be
+    //  the row index, col index and in-block index at the same time
+    for (int c = 0; c < BOARD_SIZE; c++) {
+        if (c != x) {
+            if (!try_remove_num_and_propagate_elim(bs, c, y, chosen_num))
+                return false;
+        }
+        if (c != y) {
+            if (!try_remove_num_and_propagate_elim(bs, x, c, chosen_num))
+                return false;
+        }
+
+        int bcy = by + c/BLOCK_SIZE;
+        int bcx = bx + c%BLOCK_SIZE;
+        if (bcx != x && bcy != y) {
+            if (!try_remove_num_and_propagate_elim(bs, bcx, bcy, chosen_num))
+                return false;
+        }
+    }
+
     return true;
 }
 
@@ -411,19 +401,39 @@ loop_end:
     }
 
     putchar('\n');
-    putchar('\n');
     DEBUG_PRINT_BSTATE(prev_sol);
     putchar('\n');
     DEBUG_PRINT_BOARD((*board));
 }
 
-static bool board_is_solved(sudoku_board_t *board)
+static int add_num_to_cell_data(solution_cell_data_t *cd, int num)
 {
-    for (int y = 0; y < BOARD_SIZE; y++)
-        for (int x = 0; x < BOARD_SIZE; x++) {
-            if ((*board)[y][x].val == 0)
-                return false;
-        }
+    int i;
+    for (i = 0; i < cd->num_opts; i++) {
+        if (cd->options[i] == num)
+            return cd->num_opts;
+    }
 
-    return true;
+    ASSERT(i < BOARD_SIZE);
+
+    cd->options[cd->num_opts++] = num;
+    return cd->num_opts-1;
+}
+
+static int remove_num_from_cell_data(solution_cell_data_t *cd, int num)
+{
+    int i;
+    for (i = 0; i < cd->num_opts; i++) {
+        if (cd->options[i] == num)
+            break;
+    }
+
+    if (i == cd->num_opts)
+        return cd->num_opts;
+
+    for (i++; i < cd->num_opts; i++)
+        cd->options[i-1] = cd->options[i];
+    cd->num_opts--;
+
+    return cd->num_opts+1;
 }
