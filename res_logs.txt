@@ -7,3 +7,4 @@ FOOL: room fool0, players(2): hhf232(lost) 1(won)
 SUDOKU: solved, room sudoku0, players(2): 1 q
 SUDOKU: solved, room sudoku0, players(2): q w
 SUDOKU: solved, room sudoku0, players(1): q
+SUDOKU: solved, room sudoku0, players(1): q

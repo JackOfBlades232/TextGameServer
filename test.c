@@ -22,8 +22,13 @@ bool sudoku_is_correct(sudoku_board_t *board)
             if (x1 != x2 && y1 != y2 && (x1/3 != x2/3 || y1/3 != y2/3))
                 continue;
 
-            if ((*board)[y1][x1].val == (*board)[y2][x2].val)
+            if (
+                    (*board)[y1][x1].val && (*board)[y2][x2].val &&
+                    (*board)[y1][x1].val == (*board)[y2][x2].val
+               )
+            {
                 return false;
+            }
         }
     }
 

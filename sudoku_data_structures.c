@@ -6,18 +6,19 @@
 #define BLOCK_SIZE        3
 #define BOARD_BLOCKS      3
 #define BOARD_SIZE        BLOCK_SIZE*BOARD_BLOCKS
+#define NUM_CELLS         BOARD_SIZE*BOARD_SIZE
 
-#define NON_MAIN_ELEM_CNT BOARD_SIZE*BOARD_SIZE - BOARD_BLOCKS*BLOCK_SIZE*BLOCK_SIZE
+#define NON_MAIN_ELEM_CNT NUM_CELLS - BOARD_BLOCKS*BLOCK_SIZE*BLOCK_SIZE
 
-/*
 #define MIN_EMPTY 24
-#define MAX_EMPTY 57
-*/
+#define MAX_EMPTY 64
+/*
 #define MIN_EMPTY 3
 #define MAX_EMPTY 3
+*/
 
-// @TODO: test and refac full board generation
 // @TODO: implement removal with unique solution
+// @TODO: test and refac full board generation
 
 typedef struct sudoku_cell_tag {
     int val;
@@ -81,6 +82,7 @@ static bool try_remove_number(sudoku_board_t *board, int x, int y)
 }
 
 static bool fill_board(sudoku_board_t *board);
+static void remove_board_elements(sudoku_board_t *board);
 
 static void generate_board(sudoku_board_t *board)
 {
@@ -106,20 +108,9 @@ static void generate_board(sudoku_board_t *board)
         }
     }
 
-    // Then, we fill board
+    // Then, we fill board and remove elements to obtain a unique solution
     fill_board(board);
-
-    // @TEST: random removal
-    int k = randint(MIN_EMPTY, MAX_EMPTY);
-    for (int i = 0; i < k; i++) {
-        int x, y;
-        do {
-            x = randint(0, BOARD_SIZE-1);
-            y = randint(0, BOARD_SIZE-1);
-        } while ((*board)[y][x].val == 0);
-        (*board)[y][x].val = 0;
-        (*board)[y][x].is_initial = false;
-    }
+    remove_board_elements(board);
 }
 
 typedef struct coord_tag {
@@ -134,6 +125,21 @@ typedef struct solution_cell_data_tag {
 typedef solution_cell_data_t solution_board_state_t[BOARD_SIZE][BOARD_SIZE];
 
 // @TODO: move down
+static int add_num_to_cell_data(solution_cell_data_t *cd, int num)
+{
+    int i;
+    for (i = 0; i < cd->num_opts; i++) {
+        if (cd->options[i] == num)
+            break;
+    }
+    ASSERT(i < BOARD_SIZE);
+    if (i == cd->num_opts)
+        return cd->num_opts;
+
+    cd->options[cd->num_opts++] = num;
+    return cd->num_opts-1;
+}
+
 static int remove_num_from_cell_data(solution_cell_data_t *cd, int num)
 {
     int i;
@@ -151,6 +157,13 @@ static int remove_num_from_cell_data(solution_cell_data_t *cd, int num)
 
     return cd->num_opts+1;
 }
+#define DEBUG_PRINT_BOARD(_board) \
+    for (int _y = 0; _y < BOARD_SIZE; _y++) { \
+        for (int _x = 0; _x < BOARD_SIZE; _x++) { \
+            printf("%d%c ", _board[_y][_x].val, _board[_y][_x].is_initial ? ' ' : '\''); \
+        } \
+        printf("\n"); \
+    } \
 
 #define DEBUG_PRINT_BSTATE(_bstate) \
     for (int _y = 0; _y < BOARD_SIZE; _y++) { \
@@ -237,8 +250,6 @@ static bool fill_board(sudoku_board_t *board)
             cellc->x = x;
             cellc->y = y;
         }
-    // @SPEED: possible optimization: instead of random shuffle, choose one with
-    //      less options (randomly out of equal)
     DO_RANDOM_PERMUTATION(coord_t, cell_stack, NON_MAIN_ELEM_CNT);
 
     for (int y = 0; y < BOARD_SIZE; y++)
@@ -274,23 +285,23 @@ static bool fill_board(sudoku_board_t *board)
 
     int stack_top = 0;
     while (stack_top < NON_MAIN_ELEM_CNT) {
-        solution_board_state_t *prev = &board_state_stack[stack_top];
-        solution_board_state_t *cur = &board_state_stack[stack_top+1];
-        memcpy(*cur, *prev, sizeof(*cur));
+        solution_board_state_t *prev_sol = &board_state_stack[stack_top];
+        solution_board_state_t *cur_sol = &board_state_stack[stack_top+1];
+        memcpy(*cur_sol, *prev_sol, sizeof(*cur_sol));
 
         int x = cell_stack[stack_top].x;
         int y = cell_stack[stack_top].y;
-        solution_cell_data_t *cd = &(*cur)[y][x];
+        solution_cell_data_t *cd = &(*cur_sol)[y][x];
 
         int opt_idx = 0;
         bool found_good_choice = false;
         while (opt_idx < cd->num_opts) {
-            found_good_choice = assign_and_eliminate_options(cur, x, y, opt_idx);
+            found_good_choice = assign_and_eliminate_options(cur_sol, x, y, opt_idx);
             if (found_good_choice)
                 break;
 
             opt_idx++;
-            memcpy(*cur, *prev, sizeof(*cur));
+            memcpy(*cur_sol, *prev_sol, sizeof(*cur_sol));
         }
         
         if (found_good_choice)
@@ -310,13 +321,102 @@ static bool fill_board(sudoku_board_t *board)
     DEBUG_PRINT_BSTATE(board_state_stack[stack_top]);
     */
 
-    solution_board_state_t *fin = &board_state_stack[stack_top];
+    solution_board_state_t *fin_sol = &board_state_stack[stack_top];
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
-            (*board)[y][x].val = (*fin)[y][x].options[0];
+            (*board)[y][x].val = (*fin_sol)[y][x].options[0];
             (*board)[y][x].is_initial = true;
         }
     return true;
+}
+
+static void remove_board_elements(sudoku_board_t *board)
+{
+    int removed_elements_threshold = randint(MIN_EMPTY, MAX_EMPTY);
+    coord_t cells[NUM_CELLS] = { 0 };
+
+    int idx = 0;
+    for (int y = 0; y < BOARD_SIZE; y++)
+        for (int x = 0; x < BOARD_SIZE; x++) {
+            coord_t *cellc = &cells[idx++];
+            cellc->x = x;
+            cellc->y = y;
+        }
+    DO_RANDOM_PERMUTATION(coord_t, cells, NON_MAIN_ELEM_CNT);
+
+    solution_board_state_t prev_sol = { 0 },
+                           cur_sol  = { 0 };
+
+    for (int y = 0; y < BOARD_SIZE; y++)
+        for (int x = 0; x < BOARD_SIZE; x++) {
+            prev_sol[y][x].options[0] = (*board)[y][x].val;
+            prev_sol[y][x].num_opts = 1;
+        }
+
+    int removed_elements = 0;
+    for (int i = 0; i < NUM_CELLS; i++) {
+
+        int x = cells[i].x;
+        int y = cells[i].y;
+
+        if (prev_sol[y][x].num_opts > 1)
+            continue;
+
+        memcpy(cur_sol, prev_sol, sizeof(cur_sol));
+        int num = (*board)[y][x].val;
+
+        // @BUG: some cells contain duplicates in sol_state, it might not affect the result, but look into it
+        unsigned long other_sectors_containing_num = 0;
+        for (int oy = 0; oy < BOARD_SIZE; oy++)
+            for (int ox = 0; ox < BOARD_SIZE; ox++) {
+                if (ox == x && oy == y)
+                    continue;
+
+                if ((*board)[oy][ox].val == num) {
+                    int block_idx = BOARD_BLOCKS*oy/BLOCK_SIZE + ox/BLOCK_SIZE;
+                    // bits 0..8 for col inclusions, 9..17 -- row, 18..26 - blocks
+                    other_sectors_containing_num |=
+                        (1 << ox) | (1 << (oy + BOARD_SIZE)) | (1 << (block_idx + 2*BOARD_SIZE));
+                }
+            }
+
+        for (int oy = 0; oy < BOARD_SIZE; oy++)
+            for (int ox = 0; ox < BOARD_SIZE; ox++) {
+                if (ox == x && oy == y)
+                    continue;
+
+                solution_cell_data_t *cd = &cur_sol[y][x];
+                int block_idx = BOARD_BLOCKS*oy/BLOCK_SIZE + ox/BLOCK_SIZE;
+                if (
+                        !(other_sectors_containing_num & (1 << ox)) &&
+                        !((other_sectors_containing_num >> BOARD_SIZE) & (1 << oy)) &&
+                        !((other_sectors_containing_num >> 2*BOARD_SIZE) & (1 << block_idx))
+                   )
+                {
+                    add_num_to_cell_data(cd, num);
+                    if (!(*board)[oy][ox].val && cd->num_opts > 1)
+                        goto loop_end;
+                }
+            }
+
+        (*board)[y][x].val = 0; 
+        (*board)[y][x].is_initial = false; 
+        // @SPEED: if all ok, this is done twice needlessly (beginning and end)
+        memcpy(prev_sol, cur_sol, sizeof(prev_sol));
+
+        removed_elements++;
+        if (removed_elements >= removed_elements_threshold)
+            break;
+
+loop_end:
+        NOOP;
+    }
+
+    putchar('\n');
+    putchar('\n');
+    DEBUG_PRINT_BSTATE(prev_sol);
+    putchar('\n');
+    DEBUG_PRINT_BOARD((*board));
 }
 
 static bool board_is_solved(sudoku_board_t *board)
