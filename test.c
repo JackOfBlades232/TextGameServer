@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "sudoku_data_structures.c"
+#include "sudoku_board.h"
+#include "sudoku_generator.h"
 
 long get_nsec()
 {
@@ -37,8 +38,8 @@ bool sudoku_is_correct(sudoku_board_t *board)
 
 int main()
 {
+    /*
     sudoku_board_t board;
-
     srand(time(NULL));
 
     for (;;) {
@@ -57,7 +58,6 @@ int main()
         getchar();
     }
 
-    /*
     for (int y = 0; y < 9; y++) {
         for (int x = 0; x < 9; x++)
             printf("%d ", board[y][x].val);
@@ -69,7 +69,7 @@ int main()
         if (scanf("%d %d %d", &number, &x, &y) != 3)
             exit(1);
         if (number == -1) {
-            if (try_remove_number(&board, x, y))
+            if (board_try_remove_number(&board, x, y))
             {
                 for (int i = 0; i < 40; i++)
                     putchar('\n');
@@ -80,7 +80,7 @@ int main()
                 }
             } else
                 printf("Can't remove this!\n");
-        } else if (try_put_number(&board, number, x, y))
+        } else if (board_try_put_number(&board, number, x, y))
         {
             for (int i = 0; i < 40; i++)
                 putchar('\n');

@@ -11,3 +11,5 @@ SUDOKU: solved, room sudoku0, players(1): q
 SUDOKU: solved, room sudoku0, players(1): q
 SUDOKU: solved, room sudoku0, players(1): q
 SUDOKU: solved, room sudoku0, players(1): q
+SUDOKU: solved, room sudoku0, players(1): q
+SUDOKU: solved, room sudoku0, players(1): q

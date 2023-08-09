@@ -67,6 +67,14 @@ void hub_init_room(server_room_t *s_room, void *payload)
     r_data->passwd_f = fopen(payload_data->passwd_path, "r+");
     ASSERT_ERR(r_data->passwd_f);
     ASSERTF(passwd_file_is_correct(r_data), "Invalid password file\n");
+
+    // Init global subsystems for all modules (@NOTE: might not be the best place)
+    if (hub_preset.init_subs_f)
+        (*hub_preset.init_subs_f)();
+    for (int i = 0; i < NUM_GAMES; i++) {
+        if (game_presets[i].init_subs_f)
+            (*game_presets[i].init_subs_f)();
+    }
 }
 
 void hub_deinit_room(server_room_t *s_room)

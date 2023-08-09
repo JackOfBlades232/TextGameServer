@@ -1,98 +1,146 @@
-/* TextGameServer/sudoku_data_structures.c */
+/* TextGameServer/sudoku_generator.h */
+#include "sudoku_generator.h"
 #include "utils.h"
-#include "defs.h"
-#include <string.h>
-
-#define BLOCK_SIZE        3
-#define BOARD_BLOCKS      3
-#define BOARD_SIZE        (BLOCK_SIZE*BOARD_BLOCKS)
-#define NUM_CELLS         (BOARD_SIZE*BOARD_SIZE)
+#if USE_CACHE_AND_THREAD
+  #include <pthread.h>
+  #include <signal.h>
+  #include <unistd.h>
+  #include <string.h>
+#endif
 
 #define NON_MAIN_ELEM_CNT (NUM_CELLS - BOARD_BLOCKS*BLOCK_SIZE*BLOCK_SIZE)
 
 #define MIN_EMPTY 48
 #define MAX_EMPTY 64
 
-typedef struct sudoku_cell_tag {
-    int val;
-    bool is_initial;
-} sudoku_cell_t;
+#if USE_CACHE_AND_THREAD
 
-typedef sudoku_cell_t sudoku_board_t[BOARD_SIZE][BOARD_SIZE];
+  #define BOARD_CACHE_SIZE       16
+  #define MAX_SHUFFLES_PER_BOARD 4
+  #define MAX_SHUFFLES_PER_GEN   (BOARD_CACHE_SIZE*MAX_SHUFFLES_PER_BOARD)
 
-typedef enum player_state_tag {
-    ps_lobby,
-    ps_idle,
-    ps_acting
-} player_state_t;
+typedef struct board_cache_tag {
+    int quieries_after_last_gen;
+    sudoku_board_t main_cache[BOARD_CACHE_SIZE], back_cache[BOARD_CACHE_SIZE];
+} board_cache_t;
 
-typedef enum game_state_tag {
-    gs_awaiting_players,
-    gs_in_progress,
-    gs_game_end     
-} game_state_t;
+#endif
 
-static bool try_put_number(sudoku_board_t *board, int number, int x, int y)
+typedef struct coord_tag {
+    int x, y;
+} coord_t;
+
+typedef struct solution_cell_data_tag {
+    int options[BOARD_SIZE];
+    int num_opts;
+} solution_cell_data_t;
+
+typedef solution_cell_data_t solution_board_state_t[BOARD_SIZE][BOARD_SIZE];
+
+#if USE_CACHE_AND_THREAD
+static board_cache_t board_cache         = { 0 };
+
+static pthread_t generation_thread       = { 0 };
+static bool thread_spawned               = false;
+static pthread_mutex_t board_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile static sig_atomic_t caught_usr1 = 0;
+
+static void *sgen_thread_main(void *data);
+
+void usr1_handler(int s)
 {
-    ASSERT(number >= 1 && number <= BOARD_SIZE);
-    ASSERT(x >= 0 && y >= 0 && x < BOARD_SIZE && y < BOARD_SIZE);
-    if ((*board)[y][x].val != 0)
-        return false;
+    caught_usr1 = 1;
+    signal(SIGUSR1, usr1_handler);
+}
+#endif
 
-    // horiz
-    for (int nx = 0; nx < BOARD_SIZE; nx++) {
-        if (nx != x && (*board)[y][nx].val == number)
-            return false;
+void sgen_init()
+{
+#if USE_CACHE_AND_THREAD
+    if (thread_spawned)
+        return;
+
+    thread_spawned = true;
+    pthread_create(&generation_thread, NULL, sgen_thread_main, NULL);
+    pthread_detach(generation_thread);
+#endif
+}
+
+static void generate_board(sudoku_board_t *board);
+static void copy_board_shuffled(sudoku_board_t *dest, sudoku_board_t *src);
+
+void sgen_get_new_board(sudoku_board_t *dest)
+{
+#if USE_CACHE_AND_THREAD
+
+    pthread_mutex_lock(&board_cache_mutex);
+    {
+        int board_idx = board_cache.quieries_after_last_gen % BOARD_CACHE_SIZE;
+        copy_board_shuffled(dest, &board_cache.main_cache[board_idx]);
+        board_cache.quieries_after_last_gen++;
     }
-    // vert
-    for (int ny = 0; ny < BOARD_SIZE; ny++) {
-        if (ny != y && (*board)[ny][x].val == number)
-            return false;
+    pthread_mutex_unlock(&board_cache_mutex);
+
+    if (board_cache.quieries_after_last_gen >= MAX_SHUFFLES_PER_GEN)
+        pthread_kill(generation_thread, SIGUSR1);
+
+#else
+
+    sudoku_board_t tmp;
+    generate_board(&tmp);
+    copy_board_shuffled(dest, &tmp);
+
+#endif
+}
+
+#if USE_CACHE_AND_THREAD
+static void regenerate_cache();
+
+static void *sgen_thread_main(void *data)
+{
+    signal(SIGUSR1, usr1_handler);
+    regenerate_cache();
+     
+    // Here we do not try to be strict with correct signal catching
+    // (sigprocmask and what not), since we are not required to react to every
+    // single signal, and it is ok to skip some if we still regenerate in
+    // that approximate time
+    for (;;) {
+        pause();
+
+        if (caught_usr1) {
+            caught_usr1 = 0;
+            if (board_cache.quieries_after_last_gen >= MAX_SHUFFLES_PER_GEN)
+                regenerate_cache();
+        }
     }
 
-    // block
-    int bby = BLOCK_SIZE*(y/BLOCK_SIZE);
-    int bbx = BLOCK_SIZE*(x/BLOCK_SIZE);
-    for (int by = bby; by < bby+BLOCK_SIZE; by++)
-        for (int bx = bbx; bx < bbx+BLOCK_SIZE; bx++) {
-            if ((bx != x || by != y) && (*board)[by][bx].val == number)
-                return false;
-        }
-
-    (*board)[y][x].val = number;
-    (*board)[y][x].is_initial = false;
-    return true;
+    return NULL;
 }
 
-static bool try_remove_number(sudoku_board_t *board, int x, int y)
+static void regenerate_cache()
 {
-    ASSERT(x >= 0 && y >= 0 && x < BOARD_SIZE && y < BOARD_SIZE);
-    if ((*board)[y][x].is_initial || (*board)[y][x].val == 0)
-        return false;
+    for (int i = 0; i < BOARD_CACHE_SIZE; i++)
+        generate_board(&board_cache.back_cache[i]);
 
-    (*board)[y][x].val = 0;
-    return true;
+    pthread_mutex_lock(&board_cache_mutex);
+    {
+        memcpy(board_cache.main_cache,
+               board_cache.back_cache,
+               sizeof(board_cache.main_cache));
+
+        board_cache.quieries_after_last_gen = 0;
+    }
+    pthread_mutex_unlock(&board_cache_mutex);
 }
-
-static bool board_is_solved(sudoku_board_t *board)
-{
-    for (int y = 0; y < BOARD_SIZE; y++)
-        for (int x = 0; x < BOARD_SIZE; x++) {
-            if ((*board)[y][x].val == 0)
-                return false;
-        }
-
-    return true;
-}
+#endif
 
 static void fill_board(sudoku_board_t *board);
 static void remove_board_elements(sudoku_board_t *board);
-static void copy_board_shuffled(sudoku_board_t *dest, sudoku_board_t *src);
 
 static void generate_board(sudoku_board_t *board)
 {
-    sudoku_board_t base_board;
-    memset(base_board, 0, sizeof(base_board));
+    memset(*board, 0, sizeof(*board));
 
     // First, fill all diagonal blocks as an optimization
     int numbers[BOARD_SIZE];
@@ -106,7 +154,7 @@ static void generate_board(sudoku_board_t *board)
         for (int j = 0; j < BOARD_SIZE; j++) {
             int y = by+(j/BLOCK_SIZE);
             int x = bx+(j%BLOCK_SIZE);
-            sudoku_cell_t *cell = &base_board[y][x];
+            sudoku_cell_t *cell = &(*board)[y][x];
 
             cell->val = numbers[j];
             cell->is_initial = true;
@@ -114,50 +162,78 @@ static void generate_board(sudoku_board_t *board)
     }
 
     // Then, we fill board and remove elements to obtain a unique solution
-    fill_board(&base_board);
-    remove_board_elements(&base_board);
-
-    // Finally, shuffle the result (@NOTE: move out to "api")
-    copy_board_shuffled(board, &base_board);
+    fill_board(board);
+    remove_board_elements(board);
 }
 
-typedef struct coord_tag {
-    int x, y;
-} coord_t;
+// @BUG: somehow after shuffling I've encountered sudokus with non-unique
+// solutions. However, I'm not very interested in fixing this
+static void copy_board_shuffled(sudoku_board_t *dest, sudoku_board_t *src)
+{
+    int rb_shuffle[BOARD_BLOCKS];
+    int cb_shuffle[BOARD_BLOCKS];
+    int r_shuffle[BOARD_BLOCKS][BLOCK_SIZE];
+    int c_shuffle[BOARD_BLOCKS][BLOCK_SIZE];
+    int num_shuffle[BOARD_SIZE];
 
-typedef struct solution_cell_data_tag {
-    int options[BOARD_SIZE];
-    int num_opts;
-} solution_cell_data_t;
+    for (int i = 0; i < BOARD_BLOCKS; i++) {
+        rb_shuffle[i] = i;
+        cb_shuffle[i] = i;
+        for (int j = 0; j < BLOCK_SIZE; j++) {
+            r_shuffle[i][j] = j;
+            c_shuffle[i][j] = j;
+        }
+    }
+#if USE_BLOCK_ROW_SHUFFLE
+    DO_RANDOM_PERMUTATION(int, rb_shuffle, BOARD_BLOCKS);
+#endif
+#if USE_BLOCK_COL_SHUFFLE
+    DO_RANDOM_PERMUTATION(int, cb_shuffle, BOARD_BLOCKS);
+#endif
+    for (int i = 0; i < BOARD_BLOCKS; i++) {
+#if USE_ROW_SHUFFLE
+        DO_RANDOM_PERMUTATION(int, r_shuffle[i], BLOCK_SIZE);
+#endif
+#if USE_COL_SHUFFLE
+        DO_RANDOM_PERMUTATION(int, c_shuffle[i], BLOCK_SIZE);
+#endif
+    }
 
-typedef solution_cell_data_t solution_board_state_t[BOARD_SIZE][BOARD_SIZE];
+    for (int i = 0; i < BOARD_SIZE; i++)
+        num_shuffle[i] = i+1;
+#if USE_NUMBER_SHUFFLE
+    DO_RANDOM_PERMUTATION(int, num_shuffle, BOARD_SIZE);
+#endif
+
+    bool transpose = randint(0, 1);
+
+    for (int y = 0; y < BOARD_SIZE; y++)
+        for (int x = 0; x < BOARD_SIZE; x++) {
+            int bx = x/BLOCK_SIZE;
+            int lx = x%BLOCK_SIZE;
+            int by = y/BLOCK_SIZE;
+            int ly = y%BLOCK_SIZE;
+
+            int dest_bx = cb_shuffle[bx];
+            int dest_lx = c_shuffle[bx][lx];
+            int dest_by = rb_shuffle[by];
+            int dest_ly = r_shuffle[by][ly];
+
+            int dest_x = dest_bx*BLOCK_SIZE + dest_lx;
+            int dest_y = dest_by*BLOCK_SIZE + dest_ly;
+            if (transpose)
+                swap_int(&dest_x, &dest_y);
+
+            int old_num = (*src)[y][x].val;
+            int new_num = old_num ? num_shuffle[old_num - 1] : 0;
+
+            (*dest)[dest_y][dest_x].val = new_num;
+            (*dest)[dest_y][dest_x].is_initial = (*src)[y][x].is_initial;
+        }
+}
 
 static int add_num_to_cell_data(solution_cell_data_t *cd, int num);
 static int remove_num_from_cell_data(solution_cell_data_t *cd, int num);
-
-// @TODO: remove
-#define DEBUG_PRINT_BOARD(_board) \
-    for (int _y = 0; _y < BOARD_SIZE; _y++) { \
-        for (int _x = 0; _x < BOARD_SIZE; _x++) { \
-            printf("%d%c ", _board[_y][_x].val, _board[_y][_x].is_initial ? ' ' : '\''); \
-        } \
-        printf("\n"); \
-    }
-
-#define DEBUG_PRINT_BSTATE(_bstate) \
-    for (int _y = 0; _y < BOARD_SIZE; _y++) { \
-        for (int _x = 0; _x < BOARD_SIZE; _x++) { \
-            solution_cell_data_t *_cd = &_bstate[_y][_x]; \
-            for (int _i = 0; _i < BOARD_SIZE-BLOCK_SIZE; _i++) { \
-                if (_i < _cd->num_opts) \
-                    printf("%d", _cd->options[_i]); \
-                else \
-                    printf(" "); \
-            } \
-            printf(" "); \
-        } \
-        printf("\n"); \
-    }
 
 static bool assign_and_eliminate_options(solution_board_state_t *board,
                                          int x, int y, int opt_idx);
@@ -269,11 +345,6 @@ static void fill_board(sudoku_board_t *board)
             (*board)[y][x].val = (*fin_sol)[y][x].options[0];
             (*board)[y][x].is_initial = true;
         }
-
-    // @TODO: remove
-    putchar('\n');
-    putchar('\n');
-    DEBUG_PRINT_BSTATE(board_state_stack[stack_top]);
 }
 
 static inline bool try_remove_num_and_propagate_elim(
@@ -323,8 +394,7 @@ static bool assign_and_eliminate_options(solution_board_state_t *bs,
 }
 
 // After generating full board, just try and remove elements while keeping
-// the solution unique (might be not totally correct with uniqueness, but it
-// if sufficient)
+// the solution unique
 static void remove_board_elements(sudoku_board_t *board)
 {
     int removed_elements_threshold = randint(MIN_EMPTY, MAX_EMPTY);
@@ -420,12 +490,6 @@ static void remove_board_elements(sudoku_board_t *board)
 loop_end:
         NOOP;
     }
-
-    // @TODO: remove
-    putchar('\n');
-    DEBUG_PRINT_BSTATE(cur_sol);
-    putchar('\n');
-    DEBUG_PRINT_BOARD((*board));
 }
 
 static int add_num_to_cell_data(solution_cell_data_t *cd, int num)
@@ -458,57 +522,4 @@ static int remove_num_from_cell_data(solution_cell_data_t *cd, int num)
     cd->num_opts--;
 
     return cd->num_opts+1;
-}
-
-static void copy_board_shuffled(sudoku_board_t *dest, sudoku_board_t *src)
-{
-    int rb_shuffle[BOARD_BLOCKS];
-    int cb_shuffle[BOARD_BLOCKS];
-    int r_shuffle[BOARD_BLOCKS][BLOCK_SIZE];
-    int c_shuffle[BOARD_BLOCKS][BLOCK_SIZE];
-    int num_shuffle[BOARD_SIZE];
-
-    for (int i = 0; i < BOARD_BLOCKS; i++) {
-        rb_shuffle[i] = i;
-        cb_shuffle[i] = i;
-        for (int j = 0; j < BLOCK_SIZE; j++) {
-            r_shuffle[i][j] = j;
-            c_shuffle[i][j] = j;
-        }
-    }
-    DO_RANDOM_PERMUTATION(int, rb_shuffle, BOARD_BLOCKS);
-    DO_RANDOM_PERMUTATION(int, cb_shuffle, BOARD_BLOCKS);
-    for (int i = 0; i < BOARD_BLOCKS; i++) {
-        DO_RANDOM_PERMUTATION(int, r_shuffle[i], BLOCK_SIZE);
-        DO_RANDOM_PERMUTATION(int, c_shuffle[i], BLOCK_SIZE);
-    }
-
-    for (int i = 0; i < BOARD_SIZE; i++)
-        num_shuffle[i] = i+1;
-    DO_RANDOM_PERMUTATION(int, num_shuffle, BOARD_SIZE);
-
-    for (int y = 0; y < BOARD_SIZE; y++)
-        for (int x = 0; x < BOARD_SIZE; x++) {
-            int bx = x/BLOCK_SIZE;
-            int lx = x%BLOCK_SIZE;
-            int by = y/BLOCK_SIZE;
-            int ly = y%BLOCK_SIZE;
-
-            int dest_bx = cb_shuffle[bx];
-            int dest_lx = c_shuffle[bx][lx];
-            int dest_by = rb_shuffle[by];
-            int dest_ly = r_shuffle[by][ly];
-
-            int dest_x = dest_bx*BLOCK_SIZE + dest_lx;
-            int dest_y = dest_by*BLOCK_SIZE + dest_ly;
-
-            int old_num = (*src)[y][x].val;
-            int new_num = old_num ? num_shuffle[old_num - 1] : 0;
-
-            (*dest)[dest_y][dest_x].val = new_num;
-            (*dest)[dest_y][dest_x].is_initial = (*src)[y][x].is_initial;
-        }
-
-    putchar('\n');
-    DEBUG_PRINT_BOARD((*dest));
 }

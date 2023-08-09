@@ -33,6 +33,7 @@ typedef struct session_interface_tag {
 } session_interface_t;
 
 // Functions for working with session/server data & interface in different logic modules
+typedef void (*init_subsystems_func_t)(void);
 typedef void (*init_room_func_t)(server_room_t *, void *payload);
 typedef void (*deinit_room_func_t)(server_room_t *);
 typedef void (*init_sess_func_t)(room_session_t *);
@@ -43,6 +44,7 @@ typedef bool (*room_is_available_func_t)(server_room_t *);
 struct room_preset_tag {
     const char *name;
 
+    init_subsystems_func_t     init_subs_f;
     init_room_func_t           init_room_f;
     deinit_room_func_t         deinit_room_f;
     init_sess_func_t           init_sess_f;

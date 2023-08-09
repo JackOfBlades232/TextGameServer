@@ -3,11 +3,12 @@
 #include "logic.h"
 #include "chat_funcs.h"
 #include "utils.h"
-#include "fool_data_structures.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <limits.h>
+
+#include "fool_data_structures.c"
 
 typedef struct fool_session_data_tag {
     player_state_t state;

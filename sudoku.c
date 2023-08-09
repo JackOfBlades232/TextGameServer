@@ -1,9 +1,10 @@
 /* TextGameServer/sudoku.c */
 #include "sudoku.h"
+#include "sudoku_board.h"
+#include "sudoku_generator.h"
 #include "logic.h"
 #include "chat_funcs.h"
 #include "utils.h"
-#include "sudoku_data_structures.c"
 #include <string.h>
 
 #define MAX_PLAYERS_PER_GAME 8
@@ -20,6 +21,11 @@ typedef struct sudoku_room_data_tag {
 
     server_room_t *hub_ref;
 } sudoku_room_data_t;
+
+void sudoku_init_subsystems()
+{
+    sgen_init();
+}
 
 static void reset_room(server_room_t *s_room);
 
@@ -173,7 +179,10 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
         int number;
         if (
                 sscanf(line, "%lc%d %d", &col, &row, &number) != 3 ||
-                col < 'A' || col > 'A' + BOARD_SIZE - 1 ||
+                (
+                 (col < 'A' || col > 'A' + BOARD_SIZE - 1) &&
+                 (col < 'a' || col > 'a' + BOARD_SIZE - 1)
+                ) ||
                 row < 0 || row > BOARD_SIZE-1 ||
                 number < 1 || number > BOARD_SIZE
            ) 
@@ -182,14 +191,18 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
             return;
         }
 
-        if (try_put_number(&r_data->board, number, row, col-'A'))
+        col = col >= 'a' ? col-'a' : col-'A';
+        if (board_try_put_number(&r_data->board, number, row, col))
             advance_turns(s_room);
         else
             OUTBUF_POST(r_sess, "Can't place this number here! Try again:)\r\nYour turn: > ");
     } else if (strncmp(line, "rm ", 3) == 0) {
         if (
                 sscanf(line+3, "%lc%d", &col, &row) != 2 ||
-                col < 'A' || col > 'A' + BOARD_SIZE - 1 ||
+                (
+                 (col < 'A' || col > 'A' + BOARD_SIZE - 1) &&
+                 (col < 'a' || col > 'a' + BOARD_SIZE - 1)
+                ) ||
                 row < 0 || row > BOARD_SIZE-1
            )
         {
@@ -197,7 +210,8 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
             return;
         }
 
-        if (try_remove_number(&r_data->board, row, col-'A'))
+        col = col >= 'a' ? col-'a' : col-'A';
+        if (board_try_remove_number(&r_data->board, row, col))
             advance_turns(s_room);
         else
             OUTBUF_POST(r_sess, "This number can not be removed!\r\nYour turn: > ");
@@ -227,7 +241,8 @@ static void start_game(server_room_t *s_room)
 {
     sudoku_room_data_t *r_data = s_room->data;
     r_data->state = gs_in_progress;
-    generate_board(&r_data->board);
+    // From a cache of asynchronously generated boards
+    sgen_get_new_board(&r_data->board);
 
     send_updates_to_all_players(s_room);
 }

@@ -58,6 +58,13 @@ static inline int randint(int min, int max)
     return min + (int) ((float) (max-min+1) * rand() / (RAND_MAX+1.0));
 }
 
+static inline void swap_int(int *n1, int *n2)
+{
+    int tmp = *n1;
+    *n1 = *n2;
+    *n2 = tmp;
+}
+
 #define DO_RANDOM_PERMUTATION(_type, _arr, _arr_size) \
     for (int _i = 0; _i < _arr_size-1; _i++) { \
         int _xchg_idx = randint(_i, _arr_size-1); \

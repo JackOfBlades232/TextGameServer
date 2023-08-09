@@ -7,6 +7,7 @@
 static const room_preset_t hub_preset = {
     .name                 = "",
 
+    .init_subs_f          = NULL,
     .init_room_f          = &hub_init_room,
     .deinit_room_f        = &hub_deinit_room,
     .init_sess_f          = &hub_init_room_session,
@@ -19,6 +20,7 @@ static const room_preset_t game_presets[] = {
     {
         .name                 = "fool",
 
+        .init_subs_f          = NULL,
         .init_room_f          = &fool_init_room,
         .deinit_room_f        = &fool_deinit_room,
         .init_sess_f          = &fool_init_room_session,
@@ -29,6 +31,7 @@ static const room_preset_t game_presets[] = {
     {
         .name                 = "sudoku",
 
+        .init_subs_f          = &sudoku_init_subsystems,
         .init_room_f          = &sudoku_init_room,
         .deinit_room_f        = &sudoku_deinit_room,
         .init_sess_f          = &sudoku_init_room_session,

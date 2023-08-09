@@ -15,12 +15,7 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// Phase 2
-// @TODO: make sudoku board generation run in a separate thread 
-//      (generate in batches and yield a row-col-num-block permutation on demand)
-
 // @TODO: implement normal quit on ^C and daemonization
-// @TODO: factor out common stuff from sudoku and fool
 // @TODO: Add "show tutor" command which shows the player to commands text until he presses enter
 
 #define LISTEN_QLEN          16
