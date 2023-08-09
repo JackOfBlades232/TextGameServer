@@ -13,7 +13,7 @@
 #define MIN_EMPTY 48
 #define MAX_EMPTY 64
 
-// @TODO: test and refac full board generation
+// @TODO: implement random row-col-block and number permutation
 
 typedef struct sudoku_cell_tag {
     int val;
@@ -116,8 +116,6 @@ static void generate_board(sudoku_board_t *board)
     // Then, we fill board and remove elements to obtain a unique solution
     fill_board(board);
     remove_board_elements(board);
-
-    // @TODO: apply random row-col-block and number permutation
 }
 
 typedef struct coord_tag {
@@ -319,11 +317,14 @@ static bool assign_and_eliminate_options(solution_board_state_t *bs,
     return true;
 }
 
+// After generating full board, just try and remove elements while keeping
+// the solution unique
 static void remove_board_elements(sudoku_board_t *board)
 {
     int removed_elements_threshold = randint(MIN_EMPTY, MAX_EMPTY);
     coord_t cells[NUM_CELLS] = { 0 };
 
+    // Init the order of cells that we try to clear
     int idx = 0;
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
@@ -333,25 +334,39 @@ static void remove_board_elements(sudoku_board_t *board)
         }
     DO_RANDOM_PERMUTATION(coord_t, cells, NUM_CELLS);
 
+    // We use 2 "frames" frames of the board state: if we fail to remove
+    // a number, we roll the cur state back to the prev valid "frame"
     solution_board_state_t prev_sol = { 0 },
                            cur_sol  = { 0 };
 
+    // Fill init frame with the given full board
     for (int y = 0; y < BOARD_SIZE; y++)
         for (int x = 0; x < BOARD_SIZE; x++) {
             prev_sol[y][x].options[0] = (*board)[y][x].val;
             prev_sol[y][x].num_opts = 1;
         }
+    memcpy(cur_sol, prev_sol, sizeof(cur_sol));
 
+    // The removal algo:
+    // 1. Take the next cell to process. If it has multiple candidates, 
+    //      do not remove and skip
+    // 2. Init the new state frame from prev, and start trying to remove.
+    //      For this, we take the number we want to remove and collect all
+    //      the rows, columns and blocks that contain other copies of 
+    //      it into a bitset.
+    //      (bits 0..8 for col inclusions, 9..17 -- row, 18..26 - blocks)
+    // 3. Loop over all the other cells in row/col/block of the removed one,
+    //      adding the number to the cell's possible numbers list, if another
+    //      copy of it is not in it's row/col/block (checking with the bitset).
+    // 4. Repeat until processed all cells or reached the empty elem threshold
     int removed_elements = 0;
     for (int i = 0; i < NUM_CELLS; i++) {
-
         int x = cells[i].x;
         int y = cells[i].y;
 
         if (prev_sol[y][x].num_opts > 1)
             continue;
 
-        memcpy(cur_sol, prev_sol, sizeof(cur_sol));
         int num = (*board)[y][x].val;
 
         unsigned long other_sectors_containing_num = 0;
@@ -362,7 +377,6 @@ static void remove_board_elements(sudoku_board_t *board)
 
                 if ((*board)[oy][ox].val == num) {
                     int block_idx = BOARD_BLOCKS*oy/BLOCK_SIZE + ox/BLOCK_SIZE;
-                    // bits 0..8 for col inclusions, 9..17 -- row, 18..26 - blocks
                     other_sectors_containing_num |=
                         (1 << ox) | (1 << (oy + BOARD_SIZE)) | (1 << (block_idx + 2*BOARD_SIZE));
                 }
@@ -382,14 +396,15 @@ static void remove_board_elements(sudoku_board_t *board)
                    )
                 {
                     add_num_to_cell_data(cd, num);
-                    if (!(*board)[oy][ox].val && cd->num_opts > 1)
+                    if (!(*board)[oy][ox].val && cd->num_opts > 1) {
+                        memcpy(cur_sol, prev_sol, sizeof(cur_sol));
                         goto loop_end;
+                    }
                 }
             }
 
         (*board)[y][x].val = 0; 
         (*board)[y][x].is_initial = false; 
-        // @SPEED: if all ok, this is done twice needlessly (beginning and end)
         memcpy(prev_sol, cur_sol, sizeof(prev_sol));
 
         removed_elements++;
@@ -401,7 +416,7 @@ loop_end:
     }
 
     putchar('\n');
-    DEBUG_PRINT_BSTATE(prev_sol);
+    DEBUG_PRINT_BSTATE(cur_sol);
     putchar('\n');
     DEBUG_PRINT_BOARD((*board));
 }
