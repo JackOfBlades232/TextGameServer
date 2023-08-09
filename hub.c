@@ -158,11 +158,15 @@ void hub_process_line(room_session_t *r_sess, const char *line)
     server_room_t *s_room = r_sess->room;
     hub_room_data_t *r_data = s_room->data;
 
-    // @TODO: ignore/refuse empty messages
 
     switch (rs_data->state) {
         case hs_input_username:
             {
+                if (strlen(line) == 0) {
+                    OUTBUF_POST(r_sess, "Please input something!\r\nInput your username: ");
+                    break;
+                }
+
                 if (user_already_logged_in(r_data, line)) {
                     OUTBUF_POST(r_sess, "Such a user is already logged in, try another account\r\nInput your username: ");
                     break;
@@ -180,6 +184,11 @@ void hub_process_line(room_session_t *r_sess, const char *line)
 
         case hs_input_passwd:
             {
+                if (strlen(line) == 0) {
+                    OUTBUF_POST(r_sess, "Please input something!\r\nInput your password: ");
+                    break;
+                }
+
                 if (user_already_logged_in(r_data, r_sess->username)) {
                     rs_data->state = hs_input_username;
                     OUTBUF_POST(r_sess, "While you were thiking, someone has logged into this account!\r\nInput your username: ");
@@ -198,6 +207,11 @@ void hub_process_line(room_session_t *r_sess, const char *line)
 
         case hs_create_user:
             {
+                if (strlen(line) == 0) {
+                    OUTBUF_POST(r_sess, "Please input something!\r\nInput new password: ");
+                    break;
+                }
+
                 if (user_already_logged_in(r_data, r_sess->username)) {
                     rs_data->state = hs_input_username;
                     OUTBUF_POST(r_sess, "While you were thiking, someone has logged into this account!\r\nInput your username: ");

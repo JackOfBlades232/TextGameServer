@@ -49,6 +49,7 @@ room_session_t *make_room_session(server_room_t *s_room,
     r_sess->interf = interf;
     r_sess->username = username;
     r_sess->is_in_chat = false;
+    r_sess->is_in_tutorial = false;
     (*s_room->preset->init_sess_f)(r_sess);
 
     return r_sess;

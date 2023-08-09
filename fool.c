@@ -33,6 +33,17 @@ typedef struct fool_room_data_tag {
 // View
 #define CHARS_TO_TRUMP 70
 
+static const char tutorial_text[] = 
+    "Welcome to the game of FOOL! "
+    "If there is more than 1 player, or the game is ongoing, you can press ENTER to start/continue the game\r\n"
+    "Commands\r\n"
+    "   <quit>: quit the game, works at any moment\r\n"
+    "   <chat>: switch to in-game chat, works only when the game is in progress\r\n"
+    "   <game>: switch back from chat to game\r\n"
+    "   <tutor>: show this message again\r\n"
+    "   any letter: play the card indexed by the letter (if you can play that card)\r\n"
+    "   empty line: pass (if rules allow it right now)\r\n";
+
 static void reset_room(server_room_t *s_room);
 
 void fool_init_room(server_room_t *s_room, void *payload)
@@ -79,16 +90,7 @@ void fool_init_room_session(room_session_t *r_sess)
         return;
     }
 
-    OUTBUF_POSTF(r_sess,
-            "%sWelcome to the game of FOOL! "
-            "Once there is one more player, you can press ENTER to start the game\r\n"
-            "Commands\r\n"
-            "   <quit>: quit the game, works at any moment\r\n"
-            "   <chat>: switch to in-game chat, works only when the game is in progress\r\n"
-            "   <game>: switch back from chat to game\r\n"
-            "   any letter: play the card indexed by the letter (if you can play that card)\r\n"
-            "   empty line: pass (if rules allow it right now)\r\n", 
-            clrscr);
+    OUTBUF_POSTF(r_sess, "%s%s", tutorial_text, clrscr);
     s_room->sess_refs[s_room->sess_cnt++] = r_sess;
 
     if (s_room->sess_cnt == s_room->sess_cap)
@@ -165,6 +167,22 @@ void fool_process_line(room_session_t *r_sess, const char *line)
             start_game(s_room);
         return;
     }
+
+    /*
+    if (r_sess->is_in_tutorial) {
+        r_sess->is_in_tutorial = false;
+        if (r_sess->is_in_chat)
+            chat_send_updates(s_room->chat, r_sess, "In-game chat\r\n\r\n");
+        else
+            send_updates_to_player(s_room, get_player_index(r_sess, s_room));
+        
+        return;
+    } else if (streq(line, "tutor")) {
+        r_sess->is_in_tutorial = true;
+        OUTBUF_POSTF(r_sess, "%s%s", tutorial_text, clrscr);
+        return;
+    }
+    */
 
     if (r_sess->is_in_chat) {
         if (streq(line, "game")) {

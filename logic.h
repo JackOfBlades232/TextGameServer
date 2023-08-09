@@ -58,7 +58,7 @@ struct room_session_tag {
     session_interface_t *interf;
 
     char *username;
-    bool is_in_chat;
+    bool is_in_chat, is_in_tutorial;
 
     void *data;
 };
