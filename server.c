@@ -16,7 +16,6 @@
 #include <netinet/in.h>
 
 // Phase 2
-// @TODO: sudoku board generation
 // @TODO: make sudoku board generation run in a separate thread 
 //      (generate in batches and yield a row-col-num-block permutation on demand)
 
