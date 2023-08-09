@@ -10,7 +10,7 @@
 
 #define NON_MAIN_ELEM_CNT NUM_CELLS - BOARD_BLOCKS*BLOCK_SIZE*BLOCK_SIZE
 
-#define MIN_EMPTY 24
+#define MIN_EMPTY 48
 #define MAX_EMPTY 64
 /*
 #define MIN_EMPTY 3
@@ -130,11 +130,10 @@ static int add_num_to_cell_data(solution_cell_data_t *cd, int num)
     int i;
     for (i = 0; i < cd->num_opts; i++) {
         if (cd->options[i] == num)
-            break;
+            return cd->num_opts;
     }
+
     ASSERT(i < BOARD_SIZE);
-    if (i == cd->num_opts)
-        return cd->num_opts;
 
     cd->options[cd->num_opts++] = num;
     return cd->num_opts-1;
@@ -342,7 +341,7 @@ static void remove_board_elements(sudoku_board_t *board)
             cellc->x = x;
             cellc->y = y;
         }
-    DO_RANDOM_PERMUTATION(coord_t, cells, NON_MAIN_ELEM_CNT);
+    DO_RANDOM_PERMUTATION(coord_t, cells, NUM_CELLS);
 
     solution_board_state_t prev_sol = { 0 },
                            cur_sol  = { 0 };
@@ -365,7 +364,6 @@ static void remove_board_elements(sudoku_board_t *board)
         memcpy(cur_sol, prev_sol, sizeof(cur_sol));
         int num = (*board)[y][x].val;
 
-        // @BUG: some cells contain duplicates in sol_state, it might not affect the result, but look into it
         unsigned long other_sectors_containing_num = 0;
         for (int oy = 0; oy < BOARD_SIZE; oy++)
             for (int ox = 0; ox < BOARD_SIZE; ox++) {
@@ -385,12 +383,12 @@ static void remove_board_elements(sudoku_board_t *board)
                 if (ox == x && oy == y)
                     continue;
 
-                solution_cell_data_t *cd = &cur_sol[y][x];
+                solution_cell_data_t *cd = &cur_sol[oy][ox];
                 int block_idx = BOARD_BLOCKS*oy/BLOCK_SIZE + ox/BLOCK_SIZE;
                 if (
                         !(other_sectors_containing_num & (1 << ox)) &&
-                        !((other_sectors_containing_num >> BOARD_SIZE) & (1 << oy)) &&
-                        !((other_sectors_containing_num >> 2*BOARD_SIZE) & (1 << block_idx))
+                        !(other_sectors_containing_num & (1 << (oy + BLOCK_SIZE))) &&
+                        !(other_sectors_containing_num & (1 << (block_idx + 2*BLOCK_SIZE)))
                    )
                 {
                     add_num_to_cell_data(cd, num);
