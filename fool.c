@@ -90,7 +90,7 @@ void fool_init_room_session(room_session_t *r_sess)
         return;
     }
 
-    OUTBUF_POSTF(r_sess, "%s%s", tutorial_text, clrscr);
+    OUTBUF_POSTF(r_sess, "%s%s", clrscr, tutorial_text);
     s_room->sess_refs[s_room->sess_cnt++] = r_sess;
 
     if (s_room->sess_cnt == s_room->sess_cap)
@@ -168,7 +168,6 @@ void fool_process_line(room_session_t *r_sess, const char *line)
         return;
     }
 
-    /*
     if (r_sess->is_in_tutorial) {
         r_sess->is_in_tutorial = false;
         if (r_sess->is_in_chat)
@@ -179,10 +178,9 @@ void fool_process_line(room_session_t *r_sess, const char *line)
         return;
     } else if (streq(line, "tutor")) {
         r_sess->is_in_tutorial = true;
-        OUTBUF_POSTF(r_sess, "%s%s", tutorial_text, clrscr);
+        OUTBUF_POSTF(r_sess, "%s%s", clrscr, tutorial_text);
         return;
     }
-    */
 
     if (r_sess->is_in_chat) {
         if (streq(line, "game")) {

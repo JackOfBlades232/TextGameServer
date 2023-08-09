@@ -6,6 +6,13 @@
 #include "chat.h"
 #include "utils.h"
 
+// @NOTE: currently quite a lot of logic is common to hub, sudoku and fool
+//  (especially -- sudoku and fool). Concerning chat and tutorial, 
+//  initializations and deinitializations, and stats logging. It might
+//  be a good idea to go in and factor out some of them as modules to
+//  be used in other possible games. However, for the near future I consider
+//  this project completed, thus I may not come around to doing this.
+
 typedef struct room_preset_tag room_preset_t;
 typedef struct room_session_tag room_session_t;
 

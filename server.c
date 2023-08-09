@@ -15,8 +15,6 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 
-// @TODO: Add "show tutor" command which shows the player commands text until he presses enter
-
 #define LISTEN_QLEN          16
 #define INIT_SESS_ARR_SIZE   32
 #define INIT_ROOMS_ARR_SIZE  4

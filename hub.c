@@ -35,14 +35,15 @@ typedef struct hub_session_data_tag {
 } hub_session_data_t;
 
 static const char global_chat_greeting[] = 
-        "Welcome to the global chat!\r\n"
-        "Commands:\r\n"
-        "   <listg>: list all supported games\r\n"
-        "   <listr>: list all current rooms\r\n"
-        "   <create *game name*>: create a new room\r\n"
-        "   <join *room name*>: join a room\r\n"
-        "   <quit>: disconnect from server\r\n"
-        "   anything else: send message to char\r\n\r\n";
+    "Welcome to the global chat!\r\n"
+    "Commands:\r\n"
+    "   <refresh>: show this message again and reload chat\r\n"
+    "   <listg>: list all supported games\r\n"
+    "   <listr>: list all current rooms\r\n"
+    "   <create *game name*>: create a new room\r\n"
+    "   <join *room name*>: join a room\r\n"
+    "   <quit>: disconnect from server\r\n"
+    "   anything else: send message to char\r\n\r\n";
 
 static bool passwd_file_is_correct(hub_room_data_t *r_data);
 
@@ -230,7 +231,9 @@ void hub_process_line(room_session_t *r_sess, const char *line)
             {
                 ASSERT(r_sess->is_in_chat);
 
-                if (streq(line, "quit"))
+                if (streq(line, "refresh"))
+                    enter_global_chat(r_sess, rs_data, s_room);
+                else if (streq(line, "quit"))
                     r_sess->interf->quit = true;
                 else if (streq(line, "listg"))
                     send_games_list(r_sess); 

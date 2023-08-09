@@ -22,6 +22,18 @@ typedef struct sudoku_room_data_tag {
     server_room_t *hub_ref;
 } sudoku_room_data_t;
 
+static const char tutorial_text[] = 
+    "Welcome to the game of SUDOKU! "
+    "Press ENTER to %s the game\r\n"
+    "Commands\r\n"
+    "   <quit>: quit the game, works at any moment\r\n"
+    "   <chat>: switch to in-game chat, works only when the game is in progress\r\n"
+    "   <game>: switch back from chat to game\r\n"
+    "   <tutor>: show this message again\r\n"
+    "   <L# d>: put digit d at col L row #\r\n"
+    "   <rm L#>: remove digit at col L row #, if you can\r\n"
+    "   <pass>: skip turn\r\n";
+
 void sudoku_init_subsystems()
 {
     sgen_init();
@@ -70,18 +82,7 @@ void sudoku_init_room_session(room_session_t *r_sess)
         return;
     }
 
-    OUTBUF_POSTF(r_sess,
-            "%sWelcome to the game of SUDOKU! "
-            "Press ENTER to %s the game\r\n"
-            "Commands\r\n"
-            "   <quit>: quit the game, works at any moment\r\n"
-            "   <chat>: switch to in-game chat, works only when the game is in progress\r\n"
-            "   <game>: switch back from chat to game\r\n"
-            "   <L# d>: put digit d at col L row #\r\n"
-            "   <rm L#>: remove digit at col L row #, if you can\r\n"
-            "   <pass>: skip turn\r\n",
-            clrscr, r_data->state == gs_awaiting_players ? "start" : "join");
-
+    OUTBUF_POSTF(r_sess, "%s%s", clrscr, tutorial_text);
     s_room->sess_refs[s_room->sess_cnt++] = r_sess;
 }
 
@@ -161,6 +162,20 @@ void sudoku_process_line(room_session_t *r_sess, const char *line)
     } else if (rs_data->state != ps_lobby && streq(line, "chat")) {
         r_sess->is_in_chat = true;
         chat_send_updates(s_room->chat, r_sess, "In-game chat\r\n\r\n");
+        return;
+    }
+
+    if (r_sess->is_in_tutorial) {
+        r_sess->is_in_tutorial = false;
+        if (r_sess->is_in_chat)
+            chat_send_updates(s_room->chat, r_sess, "In-game chat\r\n\r\n");
+        else
+            send_updates_to_player(s_room, get_actor_index(r_sess, s_room));
+        
+        return;
+    } else if (streq(line, "tutor")) {
+        r_sess->is_in_tutorial = true;
+        OUTBUF_POSTF(r_sess, "%s%s", clrscr, tutorial_text);
         return;
     }
 
